@@ -18,8 +18,9 @@ from astropy import constants as const
 from astropy.wcs import WCS
 from minot.ClusterTools import cluster_global
 
-from pitszi import title
+from pitszi                  import title
 from pitszi.model_library    import ModelLibrary
+from pitszi.model_sampling   import ModelSampling
 from pitszi.model_mock       import ModelMock
 from pitszi.model_inference  import ModelInference
 
@@ -28,7 +29,7 @@ from pitszi.model_inference  import ModelInference
 # Cluster Model class
 #==================================================
 
-class Model(ModelLibrary, ModelMock, ModelInference):
+class Model(ModelLibrary, ModelSampling, ModelMock, ModelInference):
     """ Model class.
     This class defines a model object. In addition to basic properties such as 
     mass and redshift, it includes the required physical properties for the modeling
@@ -62,7 +63,7 @@ class Model(ModelLibrary, ModelMock, ModelInference):
     profile. It contains the name of the model and the associated model parameters. 
     - model_pressure_fluctuation (dict): the model used for the thermal gas electron pressure 
     fluctuations. It contains the name of the model and the associated model parameters. 
-    - map_coord (SkyCoord object): the map center coordinates.
+    - map_center (SkyCoord object): the map center coordinates.
     - map_reso (quantity): the map pixel size, homogeneous to degrees.
     - map_fov (list of quantity):  the map field of view as [FoV_x, FoV_y], homogeneous to deg.
     - map_header (standard header): this allows the user to provide a header directly.
@@ -70,12 +71,20 @@ class Model(ModelLibrary, ModelMock, ModelInference):
     from the header and the projection can be arbitrary. If the header is not provided,
     then the projection will be standard RA-DEC tan projection.
 
+    Methods
+    ----------  
+    Methods are split into the following files
+    - title (title page)
+    - model_library (model library related functions)
+    - model_sampling (grid sampling related functions)
+    - model_mock (mock generation related functions)
+    - model_inference (model inference from data related functions)
+
     ToDo
     ----------  
     - Improve the 3D pressure profile cube to avoid numercial issues near the center
     - check if applying kmax isotropic makes sense before projection
     - deal with the fact that fluctuations can lead to negative pressure: add 'statistics' option
-    - implement window function
     - implement the debiasing from Romero+23 regarding Arevalo+12 method
     - implement the application of IRFs
 
@@ -166,7 +175,7 @@ class Model(ModelLibrary, ModelMock, ModelInference):
         self._model_pressure_fluctuation = dPpar
         
         #---------- Sampling
-        self._map_coord  = SkyCoord(RA, Dec, frame="icrs")
+        self._map_center = SkyCoord(RA, Dec, frame="icrs")
         self._map_reso   = 0.01*u.deg
         self._map_fov    = [5.0, 5.0]*u.deg
         self._map_header = None
@@ -266,16 +275,16 @@ class Model(ModelLibrary, ModelMock, ModelInference):
     
     #========== Maps parameters
     @property
-    def map_coord(self):
-        return self._map_coord
+    def map_center(self):
+        return self.get_map_center()
     
     @property
     def map_reso(self):
-        return self._map_reso
+        return self.get_map_reso()
     
     @property
     def map_fov(self):
-        return self._map_fov
+        return self.get_map_fov()
     
     @property
     def map_header(self):
@@ -656,14 +665,14 @@ class Model(ModelLibrary, ModelMock, ModelInference):
 
         
     #========== Sampling
-    @map_coord.setter
-    def map_coord(self, value):
+    @map_center.setter
+    def map_center(self, value):
         err_msg = ("The coordinates can be a coord object, "
                    "or a {'RA','Dec'} or {'Glon', 'Glat'} dictionary.")
         
         # Case value is a SkyCoord object
         if type(value) == astropy.coordinates.sky_coordinate.SkyCoord:
-            self._map_coord = value
+            self._map_center = value
     
         # Case value is standard coordinates
         elif type(value) == dict:
@@ -678,11 +687,11 @@ class Model(ModelLibrary, ModelMock, ModelInference):
             
             # Case where RA-Dec is used
             if 'RA' in list(value.keys()) and 'Dec' in list(value.keys()):
-                self._map_coord = SkyCoord(value['RA'], value['Dec'], frame="icrs")
+                self._map_center = SkyCoord(value['RA'], value['Dec'], frame="icrs")
     
             # Case where Glon-Glat is used
             elif 'Glon' in list(value.keys()) and 'Glat' in list(value.keys()):
-                self._map_coord = SkyCoord(value['Glon'], value['Glat'], frame="galactic")
+                self._map_center = SkyCoord(value['Glon'], value['Glat'], frame="galactic")
     
             # Otherwise, not appropriate value
             else:
@@ -764,13 +773,13 @@ class Model(ModelLibrary, ModelMock, ModelInference):
         
         # set the value
         self._map_header = header
-        self._map_coord  = None
+        self._map_center = None
         self._map_reso   = None
         self._map_fov    = None
     
         # Information
         if not self._silent: print("Setting the map header")
-        if not self._silent: print("Setting: map_coord, map_reso, map_fov to None, as the header will be used")
+        if not self._silent: print("Setting: map_center, map_reso, map_fov to None, as the header will be used")
 
     @los_reso.setter
     def los_reso(self, value):

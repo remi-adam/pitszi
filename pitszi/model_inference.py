@@ -24,18 +24,21 @@ from pitszi import utils
 class ModelInference(object):
     """ ModelInference class
         This class serves as a parser to the main Model class, 
-        it is used to infer model constraints given a model and data.
+        it is used to infer constraints on the model given data.
 
     Attributes
     ----------
-    The attributes are the same as the Model class, see main_model.py
+    The attributes are the same as the Model class, see model_main.py
 
     Methods
     ----------
     - p3d_to_p2d_from_window_function
     - 
+    -
+    -
+    -
     
-    """
+    """    
 
     #==================================================
     # Window function
