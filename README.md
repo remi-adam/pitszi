@@ -4,44 +4,47 @@ Software dedicated to model intracluster medium pressure fluctuations, generate 
                                                             
 ## Overview of the physical processes and structure of the code
 <figure>
-	<img src="/overview1.png" width="600" />
-	<figcaption> Figure 1. Overview of the parametrization, physical processes, and observables dependencies.</figcaption>
+	<img src="/overview.png" width="600" />
+	<figcaption> Figure 1. Overview of the code structure.</figcaption>
 </figure>
 
 <p style="margin-bottom:3cm;"> </p>
 
 
 ## Content
-The minot directory contains the main code, including:
+The pitszi directory contains the main code, including:
 
-- main.py : 
-	main code that defines the class Cluster
+- model_main.py : 
+	main code entry that defines the class Model
     
-- admin.py : 
-        subclass that defines administrative tools
+- model_library.py : 
+        subclass that defines model libraries and tools
    
-- modpar.py : 
-        subclass that handles model parameters functions 
+- model_mock.py : 
+        subclass used to generate mock images
         
-- imgsim.py : 
-    subclass that handles the observational properties of the cluster
-    
-- plots.py : 
-        plotting tools for automatic outputs
+- model_inference.py : 
+    subclass used to constrain the model given input data
+
+- data_main.py : 
+	class used to define input data and usefull associated functions
+
+- utils.py : 
+	library of useful functions
 
 - title.py : 
 	title for the package
 
 - notebook :
-	Repository where to find Jupyter notebook used for validation/example. 
+	Repository where to find Jupyter notebook used for validation/example/developments. 
 
 
 ## Installation
-You can use
+TBD
 
 #### Reference
-In case you use the software.
+TBD
 
 #### History
-- Version 0.1.0 --> Initial release
+- Version 0.1.0 --> Initial upload
 
