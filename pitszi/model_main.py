@@ -22,14 +22,13 @@ from pitszi                  import title
 from pitszi.model_library    import ModelLibrary
 from pitszi.model_sampling   import ModelSampling
 from pitszi.model_mock       import ModelMock
-from pitszi.model_inference  import ModelInference
 
 
 #==================================================
 # Cluster Model class
 #==================================================
 
-class Model(ModelLibrary, ModelSampling, ModelMock, ModelInference):
+class Model(ModelLibrary, ModelSampling, ModelMock):
     """ Model class.
     This class defines a model object. In addition to basic properties such as 
     mass and redshift, it includes the required physical properties for the modeling
@@ -78,15 +77,12 @@ class Model(ModelLibrary, ModelSampling, ModelMock, ModelInference):
     - model_library (model library related functions)
     - model_sampling (grid sampling related functions)
     - model_mock (mock generation related functions)
-    - model_inference (model inference from data related functions)
 
     ToDo
     ----------  
     - Improve the 3D pressure profile cube to avoid numercial issues near the center
     - check if applying kmax isotropic makes sense before projection
     - deal with the fact that fluctuations can lead to negative pressure: add 'statistics' option
-    - implement the debiasing from Romero+23 regarding Arevalo+12 method
-    - implement the application of IRFs
 
     """
 

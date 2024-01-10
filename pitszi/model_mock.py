@@ -35,8 +35,8 @@ class ModelMock(object):
     ----------
     - get_pressure_profile
     - get_pressure_fluctuation_spectrum
-    - pressure_cube_profile
-    - pressure_cube_fluctuation
+    - get_pressure_cube_profile
+    - get_pressure_cube_fluctuation
     - get_sz_map
     
     """
@@ -123,7 +123,7 @@ class ModelMock(object):
     # Pressure profile to grid
     #==================================================
     
-    def pressure_cube_profile(self):
+    def get_pressure_cube_profile(self):
         """
         Fill the grid with the pressure profile.
         
@@ -138,7 +138,7 @@ class ModelMock(object):
         """
 
         #----- Get the grid properties
-        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.define_3dgrid()
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
 
         #----- Get the offset of the cluster
         map_center = self.get_map_center()
@@ -203,12 +203,12 @@ class ModelMock(object):
     # Pressure fluctuation to grid
     #==================================================
     
-    def pressure_cube_fluctuation(self,
-                                  seed=None,
-                                  kmin_input=None,
-                                  kmax_input=None,
-                                  force_isotropy=False,
-                                  Npt=1000):
+    def get_pressure_cube_fluctuation(self,
+                                      seed=None,
+                                      kmin_input=None,
+                                      kmax_input=None,
+                                      force_isotropy=False,
+                                      Npt=1000):
         """
         Fill the grid with pressure fluctuation, i.e. delta P / P(r)
         
@@ -232,7 +232,7 @@ class ModelMock(object):
         np.random.seed(seed)
 
         #----- Get the grid properties
-        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.define_3dgrid()
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
 
         #----- Bypass if no fluctuations
         if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
@@ -350,13 +350,13 @@ class ModelMock(object):
         """
 
         #----- Get P(r) grid
-        pressure_profile_cube = self.pressure_cube_profile()
+        pressure_profile_cube = self.get_pressure_cube_profile()
 
         #----- Get delta P(x,y,z) grid
         if no_fluctuations:
             pressure_fluctuation_cube = pressure_profile_cube.value*0
         else:
-            pressure_fluctuation_cube = self.pressure_cube_fluctuation(seed=seed, force_isotropy=force_isotropy)
+            pressure_fluctuation_cube = self.get_pressure_cube_fluctuation(seed=seed, force_isotropy=force_isotropy)
 
         #----- Go to Compton
         intPdl = np.sum(pressure_profile_cube*(1 + pressure_fluctuation_cube), axis=2) * self._los_reso

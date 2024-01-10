@@ -21,10 +21,11 @@ from pitszi import utils
 # Mock class
 #==================================================
 
-class ModelInference(object):
-    """ ModelInference class
-        This class serves as a parser to the main Model class, 
-        it is used to infer constraints on the model given data.
+class Inference():
+    """ Inference class
+        This class infer the profile and power spectrum properties 
+        given input data (from class Data()) and model (from class Model())
+        that are attributes
 
     Attributes
     ----------
@@ -32,7 +33,7 @@ class ModelInference(object):
 
     Methods
     ----------
-    - p3d_to_p2d_from_window_function
+    - get_p3d_to_p2d_from_window_function
     - 
     -
     -
@@ -41,10 +42,49 @@ class ModelInference(object):
     """    
 
     #==================================================
+    # Initialization
+    #==================================================
+
+    def __init__(self,
+                 data,
+                 model,
+    ):
+        """
+        Initialize the inference object.
+        
+        Parameters
+        ----------
+        - data (pitszi Class Data object): the data
+        - model (pitszi Class Model object): the model
+        
+        """
+
+        # Input data and model
+        self.data  = data
+        self.model = model
+
+        # Analysis methodology
+        self.method_pk2d_extraction = 'Naive'
+
+        # Binning in k
+        self.kbin_min   = 0 * u.arcsec**-1
+        self.kbin_max   = 1/10.0*u.arcsec**-1
+        self.kbin_Nbin  = 30
+        self.kbin_scale = 'linear'
+
+        # MCMC parameters
+        self.mcmc_nwalkers = 100
+        self.mcmc_nsteps   = 500
+        self.mcmc_burnin   = 100
+        self.mcmc_restart  = False
+        self.mcmc_output   = './pitszi_MCMC_constraints_sampler.h5'
+        
+    
+    #==================================================
     # Window function
     #==================================================
     
-    def p3d_to_p2d_from_window_function(self):
+    def get_p3d_to_p2d_from_window_function(self):
         """
         This function compute the window function associated with a pressure 
         profile model. The output window function is a map in each pixel.
@@ -60,10 +100,10 @@ class ModelInference(object):
         """
 
         #----- Get the grid
-        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.define_3dgrid()
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
 
         #----- Get the pressure profile model
-        pressure3d_sph  = self.pressure_cube_profile()
+        pressure3d_sph  = self.get_pressure_cube_profile()
 
         #----- Get the Compton model
         compton_sph = self.get_sz_map(no_fluctuations=True)
@@ -85,100 +125,7 @@ class ModelInference(object):
         return N_theta
 
 
-    #==================================================
-    # Beam Power spectrum deconvolution
-    #==================================================
-    
-    def beam_pk_deconv(self, k, pk, beamFWHM):
-        """
-        This function corrects the power spectrum from beam 
-        attenuation.
-        
-        Parameters
-        ----------
-        - k (nd array): k array in kpc
-        - pk (nd array): power spectrum array
-        - beamFWHM (quantity): the beam FWHM homogeneous to kpc or arcsec
 
-        Outputs
-        ----------
-        - pk_deconv (np array): the deconvolved pk
-
-        """
-
-        #----- Test the inputs
-        try:
-            beam_kpc = beamFWHM.to_value('kpc')
-        except:
-            try:
-                beam_kpc = beamFWHM.to_value('radian')*self._D_ang.to_value('kpc')
-            except:
-                raise ValueError('beamFWHM is the beam FWHM, a quantity homogeneous to kpc or arcsec')    
-
-        try:
-            k_kpc = k.to_value('kpc-1')
-        except:
-            try:
-                k_kpc = k.to_value('radian-1')/self._D_ang.to_value('kpc')
-            except:
-                raise ValueError('k is the wavenumber, a quantity homogeneous to 1/kpc or 1/arcsec')    
-
-        #----- Apply the deconvolution
-        Beam_k = utils.gaussian_pk(k_kpc, beam_kpc)
-        pk_deconv = pk/Beam_k**2
-
-        return pk_deconv
-
-    
-    #==================================================
-    # Transfer function power spectrum deconvolution
-    #==================================================
-    
-    def transfer_function_pk_deconv(self, k, pk, TF):
-        """
-        This function corrects the power spectrum from transfer 
-        function attenuation.
-        
-        Parameters
-        ----------
-        - k (nd array): k array in kpc
-        - pk (nd array): power spectrum array
-        - TF (dictionary): dictionary containing 'k_arcsec' or 'k_kpc' and 'TF'
-
-        Outputs
-        ----------
-        - pk_deconv (np array): the deconvolved pk
-
-        """
-        
-        #----- Test the input
-        try:
-            k_tf = (TF['k_arcsec']*3600*180/np.pi)/self._D_ang.to_value('kpc')
-            tf   = TF['TF']
-        except:
-            try:
-                k_tf = TF['k_kpc']
-                tf   = TF['TF']
-            except:
-                raise ValueError('TF is a disctionary that contains "k_arcsec" or "k_kpc" and "TF"')    
-
-        try:
-            k_kpc = k.to_value('kpc-1')
-        except:
-            try:
-                k_kpc = k.to_value('radian-1')/self._D_ang.to_value('kpc')
-            except:
-                raise ValueError('k is the wavenumber, a quantity homogeneous to 1/kpc or 1/arcsec')    
-
-        #----- Apply the deconvolution
-        itpl = interp1d(k_tf, tf, fill_value=1)
-        TF_kpc = itpl(k_kpc)
-        
-        pk_deconv = pk/TF_kpc**2
-
-        return pk_deconv
-    
-    
     #==================================================
     # Extract the 3D power spectrum
     #==================================================
@@ -216,7 +163,7 @@ class ModelInference(object):
         """
 
         #----- Compute the conversion from Pk2d to Pk3d
-        conv2d = self.p3d_to_p2d_from_window_function()
+        conv2d = self.get_p3d_to_p2d_from_window_function()
         if mask is None:
             conv = np.mean(conv2d)
         else:
@@ -246,11 +193,11 @@ class ModelInference(object):
 
         #----- Beam deconvolution
         if BeamDeconv is not None:
-            pk2d = self.beam_pk_deconv(k2d, pk2d, BeamDeconv)
+            pk2d = deconv_beam_pk(k2d, pk2d, BeamDeconv)
 
         #----- TF deconvolution
         if TFDeconv is not None:
-            pk2d = self.transfer_function_pk_deconv(k2d, pk2d, TFDeconv)
+            pk2d = deconv_pk_transfer_function(k2d, pk2d, TFDeconv['k'], TFDeconv['TF'])
 
         #----- Compute the Pk3D
         k3d  = k2d*u.kpc**-1
@@ -259,23 +206,86 @@ class ModelInference(object):
         return k3d, Pk3d
 
 
+
+
+    #==================================================
+    # Extract Pk 3D from deprojection
+    #==================================================
+    
+    def get_p3d_deprojection(self):
+
+
+        return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    #==================================================
+    # Compute the smooth model via forward fitting
+    #==================================================
+    
+    def get_smooth_model_forward_fitting(self):
+
+
+        return
+
+
+
+
+
+
+
+
+
+    #==================================================
+    # Extract Pk 3D from deprojection
+    #==================================================
+    
+    def get_p3d_deprojection(self):
+
+
+        return
+
+
+
+
+
+
+
+
+
+    
+
     #==================================================
     # Generate a mock power spectrum
     #==================================================
     
-    def make_mock_pk2d(self,
-                       seed=None,
-                       ConvbeamFWHM=0*u.arcsec,
-                       ConvTF={'k_arcsec':np.linspace(0,1,1000)*u.arcsec, 'TF':np.linspace(0,1,1000)*0+1},
-                       method_fluct='ratio',
-                       mask=None,
-                       method_pk='Naive',
-                       kctr=None,
-                       Nbin=100, kmin=None, kmax=None, scalebin='lin', kedges=None,
-                       unbias=False,
-                       statistic='mean',
-                       DeconvBeamFWHM=None,
-                       DeconvTF=None,
+    def get_mock_pk2d(self,
+                      seed=None,
+                      ConvbeamFWHM=0*u.arcsec,
+                      ConvTF={'k_arcsec':np.linspace(0,1,1000)*u.arcsec, 'TF':np.linspace(0,1,1000)*0+1},
+                      method_fluct='ratio',
+                      mask=None,
+                      method_pk='Naive',
+                      kctr=None,
+                      Nbin=100, kmin=None, kmax=None, scalebin='lin', kedges=None,
+                      unbias=False,
+                      statistic='mean',
+                      DeconvBeamFWHM=None,
+                      DeconvTF=None,
 
     ):
         """
@@ -350,11 +360,11 @@ class ModelInference(object):
 
         #----- Beam deconvolution
         if DeconvBeamFWHM is not None:
-            pk2d = self.beam_pk_deconv(k2d, pk2d, DeconvBeamFWHM)
+            pk2d = deconv_beam_pk(k2d, pk2d, DeconvBeamFWHM)
 
         #----- TF deconvolution
         if DeconvTF is not None:
-            pk2d = self.transfer_function_pk_deconv(k2d, pk2d, DeconvTF)
+            pk2d = deconv_pk_transfer_function(k2d, pk2d, DeconvTF['k'], DeconvTF['TF'])
 
         return k2d*u.kpc**-1, pk2d*u.kpc**2
 

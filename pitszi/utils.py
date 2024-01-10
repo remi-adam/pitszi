@@ -209,6 +209,248 @@ def kmax_isotropic(Nx, Ny, Nz, proj_reso, los_reso):
 
 
 #==================================================
+# Power spectrum attenuation of a Gaussian function
+#==================================================
+
+def gaussian_pk(k, FWHM):
+    """
+    Compute the Gaussian power spectrum
+    
+    Parameters
+    ----------
+    - k (np array): array of k, same unit as 1/FWHM
+    - FWHM (float): Gaussian FWHM, same unit as 1/k
+
+    Outputs
+    ----------
+    - G_k (np array): the power spectrum of a gaussian
+    """
+    
+    sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+
+    sigma = FWHM / sigma2fwhm
+    k_0 = 1 / (np.sqrt(2) * np.pi * sigma)
+    G_k = np.exp(-k**2 / k_0**2)
+    
+    return G_k
+
+
+#==================================================
+# Apply NIKA-like transfer function
+#==================================================
+def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_beam=True):
+    """
+    Convolve SZ image with instrumental transfer function, decomposed in two: beam and processing.
+    The beam is applied in Fourier to be better coherent for Pk estimates.
+    
+    Parameters
+    ----------
+    - image (np array): input raw image
+    - reso (float): map resolution in arcsec
+    - beamFWHM (float): the map beam FWHM in units of arcsec
+    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
+    two np arrays containing the k in arcsec^-1 and the transfer function
+    - apps_TF_LS (bool): set to true to apply the large scale TF filtering
+    - apps_beam (bool): set to true to apply beam smoothing
+        
+    Outputs
+    ----------
+    - map_filt (2d np array): the convolved map
+    """
+
+    FT_map = np.fft.fft2(image)
+
+    # Beam smoothing
+    if apps_beam:
+        sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+        FT_map_sm = fourier_gaussian(FT_map, sigma=beamFWHM/sigma2fwhm/reso)
+    else:
+        FT_map_sm = FT_map*1 + 0
+    
+    # TF filtering
+    if apps_TF_LS:
+        Nx = image.shape[0]
+        Ny = image.shape[1]
+        k_x = np.fft.fftfreq(Nx, reso)
+        k_y = np.fft.fftfreq(Ny, reso)
+        k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
+        k2d_norm_flat = k2d_norm.flatten()
+
+        # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
+        itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
+        filtering_flat = itpl(k2d_norm_flat)
+        filtering = np.reshape(filtering_flat, k2d_norm.shape)
+
+        map_filt = np.real(np.fft.ifft2(FT_map_sm * filtering))
+    else:
+        map_filt = np.real(np.fft.ifft2(FT_map_sm))
+        
+    return map_filt
+
+
+#==================================================
+# Apply NIKA-like transfer function
+#==================================================
+def deconv_transfer_function(image, reso, TF):
+    """
+    Deconvolve SZ image from instrumental transfer function.
+    
+    Parameters
+    ----------
+    - image (np array): input raw image
+    - reso (float): map resolution in arcsec
+    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
+    two np arrays containing the k in arcsec^-1 and the transfer function
+        
+    Outputs
+    ----------
+    - map_deconv (2d np array): the deconvolved map
+    """
+
+    # FFT the map
+    FT_map = np.fft.fft2(image)
+
+    # Get the k arrays
+    Nx = image.shape[0]
+    Ny = image.shape[1]
+    k_x = np.fft.fftfreq(Nx, reso)
+    k_y = np.fft.fftfreq(Ny, reso)
+    k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
+    k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
+    k2d_norm_flat = k2d_norm.flatten()
+
+    # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
+    itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
+    filtering_flat = itpl(k2d_norm_flat)
+    filtering = np.reshape(filtering_flat, k2d_norm.shape)
+    
+    # Check undefined filtering
+    condition = (filtering == 0)
+    filtering[condition] = 1
+
+    # Deconvolution in Fourier
+    FT_map_deconv = FT_map / filtering
+
+    # Set the zero level depending on the TF at k=0
+    FT_map_deconv[condition] = 0 # keep the zero level untouched if 0 in TF
+
+    map_deconv = np.real(np.fft.ifft2(FT_map_deconv))
+
+    return map_deconv
+
+
+#==================================================
+# Beam Power spectrum deconvolution
+#==================================================
+
+def deconv_pk_beam(k, pk, beamFWHM):
+    """
+    This function corrects the power spectrum from beam 
+    attenuation.
+    
+    Parameters
+    ----------
+    - k (nd array): k array in inverse scale unit
+    - pk (nd array): power spectrum array
+    - beamFWHM (quantity): the beam FWHM homogeneous to the inverse of k
+
+    Outputs
+    ----------
+    - pk_deconv (np array): the deconvolved pk
+
+    """
+    
+    Beam_k = utils.gaussian_pk(k, beamFWHM)
+    pk_deconv = pk/Beam_k**2
+
+    return pk_deconv
+
+
+#==================================================
+# Transfer function power spectrum deconvolution
+#==================================================
+
+def deconv_pk_transfer_function(k, pk, TF_k, TF):
+    """
+    This function corrects the power spectrum from transfer 
+    function attenuation.
+    
+    Parameters
+    ----------
+    - k (nd array): k array in the same unit as in the TF_k
+    - pk (nd array): power spectrum array
+    - TF_k (nd array): k associated with the transfer function (same unit as k)
+    - TF (nd array): filtering (same lenght as TF_k)
+
+    Outputs
+    ----------
+    - pk_deconv (np array): the deconvolved pk
+
+    """
+
+    itpl = interp1d(TF_k, TF, fill_value=1)
+    TF_kpc = itpl(k)
+    
+    pk_deconv = pk/TF_kpc**2
+    
+    return pk_deconv
+
+
+#==================================================
+# Define the starting point of MCMC with emcee
+#==================================================
+
+def emcee_starting_point(guess, disp, par_min, par_max, nwalkers):
+    """
+    Sample the parameter space for emcee MCMC starting point
+    from a uniform distribution in the parameter space.
+        
+    Parameters
+    ----------
+    - guess (Nparam array): guess value of the parameters
+    - disp (float): dispersion allowed for unborned parameters
+    - parmin (Nparam array): min value of the parameters
+    - parmax (Nparam array): max value of the parameters
+    - nwalkers (int): number of walkers
+
+    Output
+    ------
+    start: the starting point of the chains in the parameter space
+
+    """
+
+    ndim = len(guess)
+
+    # First range using guess + dispersion
+    vmin = guess - guess*disp 
+    vmax = guess + guess*disp
+
+    # If parameters are 0, uses born
+    w0 = np.where(guess < 1e-4)[0]
+    for i in range(len(w0)):
+        if np.array(par_min)[w0[i]] != np.inf and np.array(par_min)[w0[i]] != -np.inf:
+            vmin[w0[i]] = np.array(par_min)[w0[i]]
+            vmax[w0[i]] = np.array(par_max)[w0[i]]
+        else:
+            vmin[w0[i]] = -1.0
+            vmax[w0[i]] = +1.0
+            print('Warning: some starting point parameters are difficult to estimate')
+            print('because the guess parameter is 0 and the par_min/max are infinity')
+
+    # Check that the parameters are in the prior range
+    wup = vmin < np.array(par_min)
+    wlo = vmax > np.array(par_max)
+    vmin[wup] = np.array(par_min)[wup]
+    vmax[wlo] = np.array(par_max)[wlo]
+
+    # Get parameters
+    start = [np.random.uniform(low=vmin, high=vmax) for i in range(nwalkers)]
+    
+    return start
+
+
+#==================================================
 # Measure the 3D power spectrum naively
 #==================================================
 
@@ -495,247 +737,3 @@ def get_pk2d_arevalo(image, proj_reso,
         Pk = Pk/bias
 
     return k2d, Pk
-
-
-#==================================================
-# Apply NIKA-like transfer function
-#==================================================
-def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_beam=True):
-    """
-    Convolve SZ image with instrumental transfer function, decomposed in two: beam and processing.
-    The beam is applied in Fourier to be better coherent for Pk estimates.
-    
-    Parameters
-    ----------
-    - image (np array): input raw image
-    - reso (float): map resolution in arcsec
-    - beamFWHM (float): the map beam FWHM in units of arcsec
-    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
-    two np arrays containing the k in arcsec^-1 and the transfer function
-        
-    Outputs
-    ----------
-    - map_filt (2d np array): the convolved map
-    """
-
-    FT_map = np.fft.fft2(image)
-
-    # Beam smoothing
-    if apps_beam:
-        sigma2fwhm = 2 * np.sqrt(2*np.log(2))
-        FT_map_sm = fourier_gaussian(FT_map, sigma=beamFWHM/sigma2fwhm/reso)
-    else:
-        FT_map_sm = FT_map*1 + 0
-    
-    # TF filtering
-    if apps_TF_LS:
-        Nx = image.shape[0]
-        Ny = image.shape[1]
-        k_x = np.fft.fftfreq(Nx, reso)
-        k_y = np.fft.fftfreq(Ny, reso)
-        k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
-        k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
-        k2d_norm_flat = k2d_norm.flatten()
-
-        # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-        itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
-        filtering_flat = itpl(k2d_norm_flat)
-        filtering = np.reshape(filtering_flat, k2d_norm.shape)
-
-        map_filt = np.real(np.fft.ifft2(FT_map_sm * filtering))
-    else:
-        map_filt = np.real(np.fft.ifft2(FT_map_sm))
-        
-    return map_filt
-
-
-#==================================================
-# Apply NIKA-like transfer function
-#==================================================
-def deconv_transfer_function(image, reso, TF):
-    """
-    Deconvolve SZ image from instrumental transfer function.
-    
-    Parameters
-    ----------
-    - image (np array): input raw image
-    - reso (float): map resolution in arcsec
-    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
-    two np arrays containing the k in arcsec^-1 and the transfer function
-        
-    Outputs
-    ----------
-    - map_deconv (2d np array): the deconvolved map
-    """
-
-    # FFT the map
-    FT_map = np.fft.fft2(image)
-
-    # Get the k arrays
-    Nx = image.shape[0]
-    Ny = image.shape[1]
-    k_x = np.fft.fftfreq(Nx, reso)
-    k_y = np.fft.fftfreq(Ny, reso)
-    k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
-    k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
-    k2d_norm_flat = k2d_norm.flatten()
-
-    # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-    itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
-    filtering_flat = itpl(k2d_norm_flat)
-    filtering = np.reshape(filtering_flat, k2d_norm.shape)
-    
-    # Check undefined filtring
-    condition = (filtering == 0)
-    filtering[condition] = 1
-
-    # Deconvolution in Fourier
-    FT_map_deconv = FT_map / filtering
-
-    # Set the zero level depending on the TF at k=0
-    FT_map_deconv[condition] = 0 # keep the zero level untouched if 0 in TF
-
-    map_deconv = np.real(np.fft.ifft2(FT_map_deconv))
-
-    return map_deconv
-
-
-#==================================================
-# Power spectrum attenuation of a Gaussian function
-#==================================================
-
-def gaussian_pk(k, FWHM):
-    """
-    Compute the Gaussian power spectrum
-    
-    Parameters
-    ----------
-    - k (np array): array of k, same unit as 1/FWHM
-    - FWHM (float): Gaussian FWHM, same unit as 1/k
-
-    Outputs
-    ----------
-    - G_k (np array): the power spectrum of a gaussian
-    """
-    
-    sigma2fwhm = 2 * np.sqrt(2*np.log(2))
-
-    sigma = FWHM / sigma2fwhm
-    k_0 = 1 / (np.sqrt(2) * np.pi * sigma)
-    G_k = np.exp(-k**2 / k_0**2)
-    
-    return G_k
-
-
-#==================================================
-# Compute noise MC realization
-#==================================================
-
-def make_noise_mc(header, center, noise_k, noise_r, seed=None):
-    """
-    Compute a noise MC realization given a noise Pk
-    and a radial dependence
-    
-    Parameters
-    ----------
-    - header (str): the maps header
-    - center (SkyCoord): the reference center for the noise
-    - noise_k (function): a function that takes the wavnumber in 1/arcsec
-    as input and returns the noise Pk
-    - noise_r (function): a function that takes the radius in arcsec
-    as input and returns the noise amplification
-
-    Outputs
-    ----------
-    - G_k (np array): the power spectrum of a gaussian
-    """
-
-    # Set a seed
-    np.random.seed(seed)
-        
-    # Grid info    
-    Nx = header['Naxis1']
-    Ny = header['Naxis2']
-    reso_arcsec = np.abs(header['CDELT2'])*3600
-
-    # Define the wavevector
-    k_x = np.fft.fftfreq(Nx, reso_arcsec) # 1/kpc
-    k_y = np.fft.fftfreq(Ny, reso_arcsec)
-    k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
-    k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
-    k2d_norm_flat = k2d_norm.flatten()
-
-    # Compute Pk noise
-    P2d_k_grid = noise_k(k2d_norm)
-    P2d_k_grid[k2d_norm == 0] = 0
-
-    noise = np.random.normal(0, 1, size=(Nx, Ny))
-    noise = np.fft.fftn(noise)
-    noise = np.real(np.fft.ifftn(noise * np.sqrt(P2d_k_grid)))
-
-    # Account for a radial dependence
-    ramap, decmap = map_tools.get_radec_map(header)
-    dist_map = map_tools.greatcircle(ramap, decmap,
-                                     center.icrs.ra.to_value('deg'), center.icrs.dec.to_value('deg'))
-    noise = noise * noise_r((dist_map*u.deg).to_value('arcsec'))
-
-    return noise
-
-
-
-
-
-
-
-
-#==================================================
-# Define the starting point of MCMC with emcee
-#==================================================
-
-def emcee_starting_point(guess, disp, par_min, par_max, nwalkers):
-    """
-    Sample the parameter space for emcee MCMC starting point
-    from a uniform distribution in the parameter space.
-        
-    Parameters
-    ----------
-    - guess (Nparam array): guess value of the parameters
-    - disp (float): dispersion allowed for unborned parameters
-    - parmin (Nparam array): min value of the parameters
-    - parmax (Nparam array): max value of the parameters
-    - nwalkers (int): number of walkers
-
-    Output
-    ------
-    start: the starting point of the chains in the parameter space
-
-    """
-
-    ndim = len(guess)
-
-    # First range using guess + dispersion
-    vmin = guess - guess*disp 
-    vmax = guess + guess*disp
-
-    # If parameters are 0, uses born
-    w0 = np.where(guess < 1e-4)[0]
-    for i in range(len(w0)):
-        if np.array(par_min)[w0[i]] != np.inf and np.array(par_min)[w0[i]] != -np.inf:
-            vmin[w0[i]] = np.array(par_min)[w0[i]]
-            vmax[w0[i]] = np.array(par_max)[w0[i]]
-        else:
-            vmin[w0[i]] = -1.0
-            vmax[w0[i]] = +1.0
-            print('Warning: some starting point parameters are difficult to estimate')
-            print('because the guess parameter is 0 and the par_min/max are infinity')
-
-    # Check that the parameters are in the prior range
-    wup = vmin < np.array(par_min)
-    wlo = vmax > np.array(par_max)
-    vmin[wup] = np.array(par_min)[wup]
-    vmax[wlo] = np.array(par_max)[wlo]
-
-    # Get parameters
-    start = [np.random.uniform(low=vmin, high=vmax) for i in range(nwalkers)]
-    
-    return start

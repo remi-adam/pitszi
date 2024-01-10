@@ -39,7 +39,7 @@ class ModelSampling(object):
     - get_map_reso
     - get_map_fov
     - get_map_center
-    - define_3dgrid
+    - get_3dgrid
     
     """
 
@@ -195,7 +195,7 @@ class ModelSampling(object):
     # Build the 3d grid
     #==================================================
     
-    def define_3dgrid(self):
+    def get_3dgrid(self):
         """
         Build the physical 3D grid.
         
