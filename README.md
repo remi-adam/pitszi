@@ -15,20 +15,23 @@ Software dedicated to model intracluster medium pressure fluctuations, generate 
 The pitszi directory contains the main code, including:
 
 - model_main.py : 
-	main code entry that defines the class Model
+	main code entry defining the class Model
     
 - model_library.py : 
         subclass that defines model libraries and tools
+
+- model_sampling.py : 
+        subclass that deals with the sampling of the model
    
 - model_mock.py : 
         subclass used to generate mock images
-        
-- model_inference.py : 
-    subclass used to constrain the model given input data
 
 - data_main.py : 
 	class used to define input data and usefull associated functions
 
+- inference_main.py : 
+  	class used to constrain the model (from Model class) given input data (from Data class)
+  
 - utils.py : 
 	library of useful functions
 
