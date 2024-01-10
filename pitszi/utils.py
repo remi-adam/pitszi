@@ -257,7 +257,7 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
     ----------
     - map_filt (2d np array): the convolved map
     """
-
+    
     FT_map = np.fft.fft2(image)
 
     # Beam smoothing
