@@ -341,7 +341,6 @@ class ModelMock(object):
         - seed (bool): set to a number for reproducible fluctuations
         - no_fluctuations (bool): set to true when the pure spherical model is requested
         - force_isotropy (bool): set to true to remove non isotropic k modes
-        - IRF (str): instrument response function to use
         
         Outputs
         ----------

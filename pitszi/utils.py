@@ -8,7 +8,6 @@ from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter, fourier_gaussian
 import scipy.stats as stats
 from scipy.special import gamma
-from astropy.coordinates import SkyCoord
 import astropy.units as u
 
 from minot.ClusterTools import map_tools
@@ -248,8 +247,9 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
     - image (np array): input raw image
     - reso (float): map resolution in arcsec
     - beamFWHM (float): the map beam FWHM in units of arcsec
-    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
-    two np arrays containing the k in arcsec^-1 and the transfer function
+    - TF (dict): dictionary with 'k' (unit homogeneous to 1/arcsec) 
+    and 'TF' as keys, i.e. two np arrays containing the k and the 
+    transfer function
     - apps_TF_LS (bool): set to true to apply the large scale TF filtering
     - apps_beam (bool): set to true to apply beam smoothing
         
@@ -278,7 +278,7 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
         k2d_norm_flat = k2d_norm.flatten()
 
         # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-        itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
+        itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=1)
         filtering_flat = itpl(k2d_norm_flat)
         filtering = np.reshape(filtering_flat, k2d_norm.shape)
 
@@ -300,8 +300,9 @@ def deconv_transfer_function(image, reso, TF):
     ----------
     - image (np array): input raw image
     - reso (float): map resolution in arcsec
-    - TF (dict): dictionary with 'k_arcsec' and 'TF' as keys, i.e.
-    two np arrays containing the k in arcsec^-1 and the transfer function
+    - TF (dict): dictionary with 'k' (unit homogeneous to 1/arcsec) 
+    and 'TF' as keys, i.e. two np arrays containing the k and the 
+    transfer function
         
     Outputs
     ----------
@@ -321,7 +322,7 @@ def deconv_transfer_function(image, reso, TF):
     k2d_norm_flat = k2d_norm.flatten()
 
     # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-    itpl = interp1d(TF['k_arcsec'], TF['TF'], bounds_error=False, fill_value=1)
+    itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=1)
     filtering_flat = itpl(k2d_norm_flat)
     filtering = np.reshape(filtering_flat, k2d_norm.shape)
     
