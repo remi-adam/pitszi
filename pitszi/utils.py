@@ -4,6 +4,7 @@ This file contains utilities for various making calculations used in pitszi
 """
 
 import numpy as np
+import pickle
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter, fourier_gaussian
 import scipy.stats as stats
@@ -398,19 +399,36 @@ def deconv_pk_transfer_function(k, pk, TF_k, TF):
     return pk_deconv
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #==================================================
 # Define the starting point of MCMC with emcee
 #==================================================
 
-def emcee_starting_point(guess, disp, par_min, par_max, nwalkers):
+def emcee_starting_point(guess_value, guess_error, par_min, par_max, nwalkers):
     """
     Sample the parameter space for emcee MCMC starting point
     from a uniform distribution in the parameter space.
         
     Parameters
     ----------
-    - guess (Nparam array): guess value of the parameters
-    - disp (float): dispersion allowed for unborned parameters
+    - guess_value (Nparam array): guess value of the parameters
+    - guess_error (float): dispersion allowed for unborned parameters
     - parmin (Nparam array): min value of the parameters
     - parmax (Nparam array): max value of the parameters
     - nwalkers (int): number of walkers
@@ -421,23 +439,11 @@ def emcee_starting_point(guess, disp, par_min, par_max, nwalkers):
 
     """
 
-    ndim = len(guess)
+    ndim = len(guess_value)
 
     # First range using guess + dispersion
-    vmin = guess - guess*disp 
-    vmax = guess + guess*disp
-
-    # If parameters are 0, uses born
-    w0 = np.where(guess < 1e-4)[0]
-    for i in range(len(w0)):
-        if np.array(par_min)[w0[i]] != np.inf and np.array(par_min)[w0[i]] != -np.inf:
-            vmin[w0[i]] = np.array(par_min)[w0[i]]
-            vmax[w0[i]] = np.array(par_max)[w0[i]]
-        else:
-            vmin[w0[i]] = -1.0
-            vmax[w0[i]] = +1.0
-            print('Warning: some starting point parameters are difficult to estimate')
-            print('because the guess parameter is 0 and the par_min/max are infinity')
+    vmin = guess_value - guess_error 
+    vmax = guess_value + guess_error
 
     # Check that the parameters are in the prior range
     wup = vmin < np.array(par_min)
@@ -449,6 +455,100 @@ def emcee_starting_point(guess, disp, par_min, par_max, nwalkers):
     start = [np.random.uniform(low=vmin, high=vmax) for i in range(nwalkers)]
     
     return start
+
+
+#==================================================
+# Compute chain statistics
+#==================================================
+
+def chains_statistics(param_chains,
+                      lnL_chains,
+                      parname=None,
+                      conf=68.0,
+                      show=True,
+                      outfile=None):
+    """
+    Get the statistics of the chains, such as maximum likelihood,
+    parameters errors, etc.
+        
+    Parameters
+    ----------
+    - param_chains (np array): parameters as Nchain x Npar x Nsample
+    - lnl_chains (np array): log likelihood values corresponding to the chains
+    - parname (list): list of parameter names
+    - conf (float): confidence interval in %
+    - show (bool): show or not the values
+    - outfile (str): full path to file to write results
+
+    Output
+    ------
+    - par_best (float): best-fit parameter
+    - par_percentile (list of float): median, lower bound at CL, upper bound at CL
+    
+    """
+    
+    if outfile is not None:
+        file = open(outfile,'w')
+        
+    Npar = len(param_chains[0,0,:])
+
+    wbest = (lnL_chains == np.amax(lnL_chains))
+    par_best       = np.zeros(Npar)
+    par_percentile = np.zeros((3, Npar))
+    for ipar in range(Npar):
+        # Maximum likelihood
+        par_best[ipar]          = param_chains[:,:,ipar][wbest][0]
+
+        # Median and xx % CL
+        perc = np.percentile(param_chains[:,:,ipar].flatten(),
+                             [(100-conf)/2.0, 50, 100 - (100-conf)/2.0])
+        par_percentile[:, ipar] = perc
+        if show:
+            if parname is not None:
+                parnamei = parname[ipar]
+            else:
+                parnamei = 'no name'
+
+            q = np.diff(perc)
+            txt = "{0}_{{-{1}}}^{{{2}}}"
+            txt = txt.format(perc[1], q[0], q[1])
+            
+            medval = str(perc[1])+' -'+str(perc[1]-perc[0])+' +'+str(perc[2]-perc[1])
+            bfval = str(par_best[ipar])+' -'+str(par_best[ipar]-perc[0])+' +'+str(perc[2]-par_best[ipar])
+
+            print('param '+str(ipar)+' ('+parnamei+'): ')
+            print('   median   = '+medval)
+            print('   best-fit = '+bfval)
+            print('   '+parnamei+' = '+txt)
+
+            if outfile is not None:
+                file.write('param '+str(ipar)+' ('+parnamei+'): '+'\n')
+                file.write('  median = '+medval+'\n')
+                file.write('  best   = '+bfval+'\n')
+                file.write('   '+parnamei+' = '+txt+'\n')
+
+    if outfile is not None:
+        file.close() 
+            
+    return par_best, par_percentile
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #==================================================

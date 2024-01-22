@@ -62,8 +62,8 @@ class Data():
                  psf_fwhm=18*u.arcsec,
                  transfer_function=None,
                  jackknife=None,
-                 noise_covariance=None,
-                 noise_raw_rms=None,
+                 noise_covmat=None,
+                 noise_rms=None,
                  silent=False,
     ):
         """
@@ -105,8 +105,8 @@ class Data():
 
         # Description of the noise
         self.noise_jackknife       = jackknife
-        self.noise_raw_rms         = noise_raw_rms
-        self.noise_covariance      = noise_covariance
+        self.noise_rms             = noise_rms
+        self.noise_covmat          = noise_covmat
         self.noise_model_pk_center = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1 # output in [y] x arcsec^2
         self.noise_model_radial    = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    # output unitless
         
@@ -127,12 +127,14 @@ class Data():
         
         kfov = 1/(6*u.arcmin)
         TF = 1 - np.exp(-(k/kfov).to_value(''))
-        
-        self.transfer_function = {'k':k, 'TF':TF}
+        transfer_function = {'k':k, 'TF':TF}
+        self.transfer_function = transfer_function
+
+        return transfer_function
     
     
     #==================================================
-    # Compute noise MC realization
+    # Compute noise MC realization from a noise model
     #==================================================
     
     def get_noise_monte_carlo_from_model(self,
@@ -145,16 +147,14 @@ class Data():
         
         Parameters
         ----------
-        - header (str): the maps header
         - center (SkyCoord): the reference center for the noise
-        - noise_k (function): a function that takes the wavnumber in 1/arcsec
-        as input and returns the noise Pk
-        - noise_r (function): a function that takes the radius in arcsec
-        as input and returns the noise amplification
+        - Nmc (int): the number of monte carlo
+        - seed (int): the numpy random seed for reproducible results
     
         Outputs
         ----------
         - noise (nd array): the noise monte carlo cube
+
         """
         
         # Set a seed
@@ -200,8 +200,129 @@ class Data():
             noise = noise[0]
         
         return noise
+
+
+    #==================================================
+    # Compute noise MC realization from the covariance
+    #==================================================
     
+    def get_noise_monte_carlo_from_covariance(self,
+                                              Nmc=1,
+                                              seed=None):
+        """
+        Compute a noise MC realization from the noise covariance
+        matrix.
         
+        Parameters
+        ----------
+        - Nmc (int): the number of map to compute in the cube
+        - seed (int): the 
+        
+        Outputs
+        ----------
+        - noise (nd array): noise MC cube
+        """
+
+        # Check that the covariance exists
+        if self.noise_covmat is None:
+            if not self.silent:
+                print('The noise covariance matrix is undefined')
+                print('while it is requested for get_noise_monte_carlo_from_covariance')
+            return
+
+        # Set a seed
+        np.random.seed(seed)
+
+        # Get the flat noise realization
+        target_shape = self.image.shape
+        noise_mc_flat = np.random.multivariate_normal(self.noise_covmat.shape[0],
+                                                      self.noise_covmat,
+                                                      size=Nmc)
+        # Reshape it to maps
+        if Nmc == 1:
+            noise_mc = noise_mc_flat.reshape(target_shape[0], target_shape[1])
+        else:
+            noise_mc = noise_mc_flat.reshape(Nmc, target_shape[0], target_shape[1])
+
+        return noise_mc
+
+    
+    #==================================================
+    # Set the noise covariance from MC realizations
+    #==================================================
+
+    def set_noise_covariance_from_model(self,
+                                        center=None,
+                                        Nmc=1000,
+                                        seed=None):
+        """
+        Set the noise covariance from the noise model
+        
+        Parameters
+        ----------
+        - center (SkyCoord): the reference center for the noise
+        - Nmc (int): the number of monte carlo
+        - seed (int): the numpy random seed for reproducible results
+
+        Outputs
+        ----------
+        - covmat (nd array): the noise covariance matrix
+
+        """
+
+        if not self.silent:
+            print('Start computing the covariance matrix from MC simulations')
+            print('This can take significant time')
+            
+        noise_mc = self.get_noise_monte_carlo_from_model(center=center,
+                                                         Nmc=Nmc,
+                                                         seed=seed)
+        covmat = 0
+        for i in range(Nmc):
+            mflat = noise_mc[i,:,:].flatten()
+            covmat += np.matmul(mflat[:,None], mflat[None,:])
+        covmat /= Nmc
+
+        self.noise_covmat = covmat
+
+        return covmat
+
+        
+    #==================================================
+    # Set the noise inverse covariance from the covariance
+    #==================================================
+
+    def set_inverse_covariance(self):
+        """
+        Set the noise inverse covariance from the covariance
+        
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - ic (nd array): the inverse noise covariance
+        """
+
+        if self.noise_covmat is not None:
+
+            if not self.silent:
+                sh = self.image.shape
+                shcm = sh[0]*sh[1]
+                print('Inverting the covariance matrix can take some a long time for large maps')
+                print('Here the covariance is '+str(shcm)+'x'+str(shcm)+' pixels')
+                
+            icov = np.linalg.inv(self.noise_covmat)
+            self.noise_invcovmat = icov
+
+            return icov
+        
+        else:
+            if not self.silent:
+                print('The covariance matrix needs to be defined to compute its inverse')
+            return
+                
+    
     #==================================================
     # Generate Mock data
     #==================================================
@@ -270,28 +391,6 @@ class Data():
 
         return image_mock
         
-
-    #==================================================
-    # Compute noise MC realization
-    #==================================================
-    
-    def get_noise_monte_carlo_from_covariance(self,
-                                              Nmc=1,
-                                              seed=None):
-        """
-        Compute a noise MC realization from the noise covariance
-        matrix.
-        
-        Parameters
-        ----------
-        - Nmc (int): the number of map to compute in the cube
-        - seed (int): the 
-        
-        Outputs
-        ----------
-        - noise (nd array): noise MC cube
-        """
-
 
     #==================================================
     # Measure noise from JackKnife

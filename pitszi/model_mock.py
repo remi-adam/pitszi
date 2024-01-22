@@ -332,7 +332,10 @@ class ModelMock(object):
     def get_sz_map(self,
                    seed=None,
                    no_fluctuations=False,
-                   force_isotropy=False):
+                   force_isotropy=False,
+                   irfs_convolution_beam=None,
+                   irfs_convolution_TF=None):
+                   
         """
         Compute the SZ mock image.
         
@@ -341,7 +344,11 @@ class ModelMock(object):
         - seed (bool): set to a number for reproducible fluctuations
         - no_fluctuations (bool): set to true when the pure spherical model is requested
         - force_isotropy (bool): set to true to remove non isotropic k modes
-        
+        - irfs_convolution_beam (quantity): PSF FWHM in unit homogeneous to arcsec. If given, 
+        the model is convolved with the beam
+        - irfs_convolution_TF (dictionary): if given, the model is convolved 
+        with the transfer function       
+
         Outputs
         ----------
         - compton (np.ndarray) : the map in units of Compton parameter
@@ -359,9 +366,31 @@ class ModelMock(object):
 
         #----- Go to Compton
         intPdl = np.sum(pressure_profile_cube*(1 + pressure_fluctuation_cube), axis=2) * self._los_reso
-        compton = cst.sigma_T / (cst.m_e * cst.c**2) * intPdl
-        
-        return compton.to_value('')
+        compton = (cst.sigma_T / (cst.m_e * cst.c**2) * intPdl).to_value('')
+
+        #----- Convolution with instrument response
+        if (irfs_convolution_beam is not None) or (irfs_convolution_TF is not None):
+            if irfs_convolution_beam is not None:
+                apps_beam = True
+                psf_fwhm = irfs_convolution_beam.to_value('arcsec')
+            else:
+                apps_beam = False
+                psf_fwhm = 0
+
+            if irfs_convolution_TF is not None:
+                apps_TF_LS = True
+                TF = irfs_convolution_TF
+            else:
+                apps_TF_LS = False
+                kref = np.linspace(0, 1, 1000)*u.arcsec**-1
+                TF = {'k':kref, 'TF':kref.value*0+1}
+                
+            compton = utils.apply_transfer_function(compton,
+                                                    self.get_map_reso().to_value('arcsec'),
+                                                    psf_fwhm, TF,
+                                                    apps_TF_LS=apps_TF_LS, apps_beam=apps_beam)
+            
+        return compton
 
 
  
