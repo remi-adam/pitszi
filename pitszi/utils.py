@@ -4,14 +4,12 @@ This file contains utilities for various making calculations used in pitszi
 """
 
 import numpy as np
-import pickle
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter, fourier_gaussian
 import scipy.stats as stats
 from scipy.special import gamma
 import astropy.units as u
 
-from minot.ClusterTools import map_tools
 
 #==================================================
 # Check array
@@ -399,23 +397,6 @@ def deconv_pk_transfer_function(k, pk, TF_k, TF):
     return pk_deconv
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #==================================================
 # Define the starting point of MCMC with emcee
 #==================================================
@@ -531,22 +512,6 @@ def chains_statistics(param_chains,
         file.close() 
             
     return par_best, par_percentile
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

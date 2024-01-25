@@ -20,6 +20,7 @@ import emcee
 import corner
 
 from pitszi import utils
+from pitszi import plotlib
 
 #==================================================
 # Likelihood related functions
@@ -458,6 +459,10 @@ class Inference():
         
         """
 
+        # Admin
+        self.silent     = True
+        self.output_dir = './pitszi_output'
+
         # Input data and model (deepcopy to avoid modifying the input when fitting)
         self.data  = copy.deepcopy(data)
         self.model = copy.deepcopy(model) 
@@ -478,8 +483,6 @@ class Inference():
         self.mcmc_burnin             = 100
         self.mcmc_reset              = False
         self.mcmc_run                = True
-        self.mcmc_output_profile     = './pitszi_MCMC_profile_sampler.h5'
-        self.mcmc_output_fluctuation = './pitszi_MCMC_fluctuation_sampler.h5'
 
         
     #==================================================
@@ -512,7 +515,6 @@ class Inference():
                           'unit': u.kpc, 
                         },
                        }    
-        unit is mandatory if parameter is not unitless
         - fitpar_center (dictionary): same as fitpar_profile with accepted parameters
         'RA' and 'Dec'
         - fitpar_ellipticity (dictionary): same as fitpar_profile with accepted parameters
@@ -531,8 +533,7 @@ class Inference():
         """
         
         #========== Check if the MCMC sampler was already recorded
-        sampler_file = self.mcmc_output_profile
-        sampler_file2 = sampler_file.replace('.h5', '.pkl')
+        sampler_file = self.output_dir+'/pitszi_MCMC_profile_sampler.h5'        
         sampler_exist = os.path.exists(sampler_file)
         if sampler_exist:
             print('----- Existing sampler: '+sampler_file)
@@ -600,8 +601,7 @@ class Inference():
                                               fitpar_center,
                                               fitpar_ellipticity,
                                               fitpar_ZL,
-                                              use_covmat,
-                                        ], 
+                                              use_covmat], 
                                         pool=Pool(cpu_count()),
                                         moves=moves,
                                         backend=backend)
@@ -665,6 +665,149 @@ class Inference():
                 self.model.triaxiality = {'min_to_maj_axis_ratio':axis_ratio,'int_to_maj_axis_ratio':axis_ratio,
                                           'euler_angle1':0*u.deg, 'euler_angle2':90*u.deg, 'euler_angle3':angle*angle_unit}
                 
+        return par_list, sampler
+
+
+
+
+
+    
+    #==================================================
+    # Compute the Pk contraint via forward fitting
+    #==================================================
+    
+    def get_mcmc_output_results(self,
+                                parlist,
+                                sampler,
+                                conf=68.0,
+                                truth=None,
+                                extraname=''):
+        """
+        This function brute force fits the 3d power spectrum
+        using a forward modeling approach
+        
+        Parameters
+        ----------
+        - parlist (list): the list of parameter names
+        - sampler (emcee object): the sampler
+        - conf (float): confidence limit in % used in results
+        - show (bool): show the results (or only output files)
+        - extraname (string): extra name to add after MCMC in file name
+
+        Outputs
+        ----------
+        Plots are produced
+
+        """
+
+        Nchains, Nsample, Nparam = sampler.chain.shape
+
+        #---------- Remove the burnin
+        if self.mcmc_burnin <= Nsample:
+            par_chains = sampler.chain[:,self.mcmc_burnin:,:]
+            lnl_chains = sampler.lnprobability[:,self.mcmc_burnin:]
+        else:
+            par_chains = sampler.chain
+            lnl_chains = sampler.lnprobability
+            print('The burnin could not be remove because it is larger than the chain size')
+            
+        #---------- Compute statistics for the chains
+        utils.chains_statistics(par_chains, lnl_chains,
+                                parname=parlist,
+                                conf=conf,
+                                outfile=self.output_dir+'/MCMC'+extraname+'_chain_statistics.txt')
+
+        # Produce 1D plots of the chains
+        plotlib.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
+        
+        # Produce 1D histogram of the chains
+        namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_1d_hist_'+i+'.pdf' for i in parlist]
+        plotlib.chains_1Dhist(par_chains, parlist, namefiles,
+                              conf=conf, truth=truth)
+
+        # Produce 2D (corner) plots of the chains
+        plotlib.chains_2Dplots_corner(par_chains,
+                                      parlist,
+                                      self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
+                                      truth=truth)
+
+        plotlib.chains_2Dplots_sns(par_chains,
+                                   parlist,
+                                   self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
+                                   truth=truth)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    #==================================================
+    # Compute the Pk contraint via forward fitting
+    #==================================================
+    
+    def get_pk_model_forward_fitting(self,
+                                     fitpar_pk,
+                                     use_covmat=False):
+        """
+        This function brute force fits the 3d power spectrum
+        using a forward modeling approach
+        
+        Parameters
+        ----------
+        - fitpar_pk (dictionary): the model parameters associated with 
+        self.model.model_pressure_fluctuation to be fit as, e.g., 
+        fitpar_pk = {'Norm':                     # --> Parameter key (mandatory)
+                       {'guess':[0.5, 0.3],      # --> initial guess: center, uncertainty (mandatory)
+                        'unit': None,            # --> unit (mandatory, None if unitless)
+                        'limit':[0, np.inf],     # --> Allowed range, i.e. flat prior (optional)
+                        'prior':[0.5, 0.1],      # --> Gaussian prior: mean, sigma (optional)
+                        },
+                        'slope':
+                        {'limit':[-11/3-1, -11/3+1], 
+                          'unit': None, 
+                        },
+                        'L_inj':
+                        {'limit':[0, 10], 
+                          'unit': u.Mpc, 
+                        },
+                       }    
+        
+        Outputs
+        ----------
+        - sampler (emcee object): the sampler associated with model parameters of
+        the smooth component
+
+        """
+
+
+
+
+
+
+
+
+
         return sampler
 
 
@@ -673,6 +816,10 @@ class Inference():
 
 
 
+
+
+
+    
 
 
 
