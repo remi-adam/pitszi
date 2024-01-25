@@ -35,6 +35,9 @@ The pitszi directory contains the main code, including:
 - utils.py : 
 	library of useful functions
 
+- plotlib.py : 
+	library gathering plotting functions
+
 - title.py : 
 	title for the package
 
