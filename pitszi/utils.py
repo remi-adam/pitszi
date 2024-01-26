@@ -164,7 +164,7 @@ def trapz_loglog(y, x, axis=-1, intervals=False):
 
 
 #==================================================
-# Extract correlation matrix
+# Extract correlation matrix from covarariance
 #==================================================
 
 def correlation_from_covariance(covariance):
@@ -187,6 +187,28 @@ def correlation_from_covariance(covariance):
     correlation[covariance == 0] = 0
     
     return correlation
+
+
+#==================================================
+# Extract covariance matrix from correlation + std
+#==================================================
+
+def covariance_from_correlation(correlation_matrix, std):
+    """
+    Convert correlation matrix to covariance matrix.
+    
+    Parameters
+    ----------
+    - correlation_matrix (2d array): numpy array, the correlation matrix
+    - std (1d array): numpy array, standard dev along the diagonal of the covariance matrix
+    
+    Returns:
+    - cov_matrix (2d array): numpy array, the covariance matrix
+    """
+
+    cov_matrix = correlation_matrix * np.outer(std, std)
+    
+    return cov_matrix
 
 
 #==================================================
