@@ -164,6 +164,32 @@ def trapz_loglog(y, x, axis=-1, intervals=False):
 
 
 #==================================================
+# Extract correlation matrix
+#==================================================
+
+def correlation_from_covariance(covariance):
+    """
+    Compute the correlation matrix from the covariance
+    
+    Parameters
+    ----------
+    - covariance (2d array): the covariance matrix
+
+    Output
+    ------
+    - correlation (2d array): the correlation matrix
+
+    """
+    
+    v = np.sqrt(np.diag(covariance))
+    outer_v = np.outer(v, v)
+    correlation = covariance / outer_v
+    correlation[covariance == 0] = 0
+    
+    return correlation
+
+
+#==================================================
 # Define the maximum k for having isotropy in 3D
 #==================================================
 
@@ -575,12 +601,12 @@ def get_pk3d(cube, proj_reso, los_reso,
     else:
         kmax_sampling = kmax        
         
-    if scalebin is 'lin':
+    if scalebin == 'lin':
         kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-    elif scalebin is 'log':
+    elif scalebin == 'log':
         kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
     else:
-        raise ValueError("Only lin or log scales are allowed")
+        raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
 
     if kedges is None:
         kbins = kbins
@@ -657,12 +683,12 @@ def get_pk2d(image, proj_reso,
     else:
         kmax_sampling = kmax
         
-    if scalebin is 'lin':
+    if scalebin == 'lin':
         kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-    elif scalebin is 'log':
+    elif scalebin == 'log':
         kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
     else:
-        raise ValueError("Only lin or log scales are allowed")
+        raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
 
     if kedges is None:
         kbins = kbins

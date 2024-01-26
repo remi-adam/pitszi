@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import corner
 import seaborn as sns
 import pandas as pd
-
+import warnings
 
 #==================================================
 # Plot MCMC chains
@@ -424,8 +424,7 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
                             ax.fill_between(xkde_itpl, 0*ykde_itpl, y2=ykde_itpl,
                                             alpha=alpha[1], color=cols[idx][0])
                         except:
-                            print('could not get and fill bellow KDE line')
-    
+                            warnings.warn('could not get and fill bellow KDE line')
                         
                 if add_grid:
                     #ax.xaxis.set_major_locator(MultipleLocator((xmax+Dx-(xmin-Dx))/5.0))
