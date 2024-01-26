@@ -225,3 +225,58 @@ class ModelSampling(object):
         
         return Nx, Ny, Nz, proj_reso, proj_reso, self._los_reso.to_value('kpc')
 
+
+    #==================================================
+    # Give information relative to sampling
+    #==================================================
+    
+    def give_sampling_information(self):
+        """
+        Output information relative to the sampling.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        Print information
+        
+        """
+
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
+        
+        print('=====================================================')
+        print('===== Information relative to the grid sampling =====')                
+        print('=====================================================')
+        print('   Grid size :', Nx, ',', Ny, ',', Nz)
+        reso_kpc = self.get_map_reso(physical=True).to_value('kpc')
+        reso_arcsec = self.get_map_reso(physical=False).to_value('arcsec')
+        reso_kpc_s = "{:^10.1f}".format(reso_kpc)
+        reso_arcsec_s = "{:^10.1f}".format(reso_arcsec)
+        print('   Pixel size :  ', reso_kpc_s, ' kpc ; ', reso_arcsec_s, ' arcsec')
+
+        fov_kpc = self.get_map_fov(physical=True).to_value('kpc')
+        fov_arcsec = self.get_map_fov(physical=False).to_value('arcmin')
+        print('   Fov size :  [', "{:^10.1f}".format(fov_kpc[0]),
+              ',', "{:^10.1f}".format(fov_kpc[1]),
+              '] kpc ; [',
+              "{:^10.3f}".format(fov_arcsec[0]),',',
+              "{:^10.3f}".format(fov_arcsec[1]),'] arcmin')
+        print('   L.o.S. resolution :  ', "{:^10.1f}".format(los_reso),' kpc')
+        print('   Map center :  ', self.get_map_center())
+        k_proj = np.fft.fftfreq(Nx, reso_arcsec)
+        print('   k min/max projected :  ',
+              "{:^10.6f}".format(np.amin(k_proj[k_proj>0])),'/',
+              "{:^10.6f}".format(np.amax(k_proj)),' 1/arcsec')
+        k_proj = np.fft.fftfreq(Nx, proj_reso)
+        print('   k min/max projected :  ',
+              "{:^10.6f}".format(np.amin(k_proj[k_proj>0])),'/',
+              "{:^10.6f}".format(np.amax(k_proj)), ' 1/kpc')
+        k_z = np.fft.fftfreq(Nz, los_reso)
+        print('   k min/max L.o.S. :  ',
+              "{:^10.6f}".format(np.amin(k_z[k_z>0])),'/',
+              "{:^10.6f}".format(np.amax(k_z)), ' 1/kpc')
+        print('=====================================================')
+
+
+        

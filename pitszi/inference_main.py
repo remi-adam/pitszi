@@ -540,7 +540,9 @@ def get_lnlike_fluctuation(param,
                            kbin_min_arcsec=0.0,
                            kbin_max_arcsec=0.1,
                            kbin_scale='lin',
-                           param_info_noise=None):
+                           param_info_noise=None,
+                           use_covmat=False,
+                           covmat=None):
     """
     This is the likelihood function used for the forward fit of the fluctuation spectrum.
         
@@ -658,11 +660,19 @@ def get_lnlike_fluctuation(param,
     
     model_pk2d = test_pk + noise_ampli*noise_pk2d_mean
 
-    # Rescale the noise using the fact the Pk/Pk_rms is fixed
-    model_pk2d_rms = model_pk2d_rmsref * test_pk/model_pk2d_ref
-    
     #========== Compute the likelihood
-    lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / (noise_pk2d_rms**2 + model_pk2d_rms**2))
+    if use_covmat:
+        #covmat_model = covmat_model_ref
+        #covariance = covmat_noise + covmat_model
+        vec_test = model_pk2d-data_pk2d
+        covariance_inverse = np.linalg.inv(covmat)
+        lnL = -0.5*np.matmul(vec_test, np.matmul(covariance_inverse, vec_test))
+    else:
+        # Rescale noise using Pk/Pk_rms is cte
+        #model_pk2d_rms = model_pk2d_rmsref*test_pk/model_pk2d_ref
+        model_pk2d_rms = model_pk2d_rmsref
+        lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / (noise_pk2d_rms**2 + model_pk2d_rms**2))
+        
     lnL += prior
 
     #========== Check and return
@@ -999,6 +1009,7 @@ class Inference():
                                        fitpar_pk3d,
                                        fitpar_noise=None,
                                        Nmc_noise=1000,
+                                       kbin_edges=None,
                                        set_best_fit=True):
         """
         This function brute force fits the 3d power spectrum
@@ -1137,6 +1148,12 @@ class Inference():
         for imc in range(Nmc_noise): noise_pk2d_covmat += np.matmul((noise_pk2d_mc[imc,:]-noise_pk2d_mean)[:,None],
                                                                     (noise_pk2d_mc[imc,:]-noise_pk2d_mean)[None,:])
         noise_pk2d_covmat /= Nmc_noise
+
+        #----- Check that all bins are filled
+        if np.sum(np.isnan(noise_pk2d_covmat)) > 0 or np.sum(np.isnan(model_pk2d_covmat))>0:
+            print('The number of bins is such that some bins are empty, leading to nan in the data.')
+            print('You may pass the bin edges directly for specific bining strategies.')
+            raise ValueError('Issue with binning')
         
         #========== Define the MCMC setup
         backend = emcee.backends.HDFBackend(sampler_file)
@@ -1177,11 +1194,14 @@ class Inference():
                                               self.kbin_min.to_value('arcsec-1'),
                                               self.kbin_max.to_value('arcsec-1'),
                                               self.kbin_scale,
-                                              fitpar_noise],
-                                        pool=Pool(cpu_count()),
+                                              fitpar_noise,
+                                              True,
+                                              noise_pk2d_covmat+model_pk2d_covmat,
+                                        ],
+                                        #pool=Pool(cpu_count()),
                                         moves=moves,
                                         backend=backend)
-
+        
         #========== Run the MCMC
         print('----- MCMC sampling -----')
         if self.mcmc_run:
