@@ -5,6 +5,8 @@ This file contains utilities related to plots used in pitszi
 
 import numpy as np
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter
+from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 import corner
 import seaborn as sns
@@ -203,6 +205,7 @@ def seaborn_1d(chains, output_fig=None, ci=0.68, truth=None,
     This function plots 1D distributions of MC chains
     
     Parameters:
+    -----------
     - chain (array): the chains sampling the considered parameter
     - output_fig (str): full path to output plot
     - ci (float): confidence interval considered
@@ -216,7 +219,9 @@ def seaborn_1d(chains, output_fig=None, ci=0.68, truth=None,
     - fontsize (int): the font size
     - cols (tupple): the colors of the histogram, confidence interval 
     values, and confidence interval filled region
+
     Output:
+    -------
     - Plots
     '''
 
@@ -322,6 +327,7 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
     This function plots corner plot of MC chains
     
     Parameters:
+    -----------
     - dfs (list): list of pandas dataframe used for the plot
     - output_fig (str): full path to the figure to save
     - ci2d (list): confidence intervals to be considered in 2d
@@ -346,6 +352,7 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
     is for histogram, histogram edges, filled contours, contour edges
     
     Output:
+    -------
     - Plots
     '''
     
@@ -509,3 +516,95 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
         plt.savefig(output_fig)
 
 
+#==================================================
+# Plot of the best-fit profile
+#==================================================
+
+def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
+                                    visu_smooth=10,
+                                    cmap='Spectral_r',
+                                    contcol='k'):
+    '''
+    This function plots the best fit profile model
+    
+    Parameters:
+    ----------
+    - figfile (str): name of the file to produce
+    - data (pitszi object): data object from pitszi
+    - model_ymap_sph (2d image): the best fit model
+    - visu_smooth (float): the smoothing FWHM in arcsec
+    - cmap (str): colormap
+    - contcol (str): the contour color
+    
+    Output:
+    -------
+    - Plots produced
+    '''
+
+    #----- Get extra data info
+    mask = data.mask
+
+    noise_mc = data.get_noise_monte_carlo_from_model(Nmc=1000)
+    if noise_mc is None:
+            noise_mc = data.get_noise_monte_carlo_from_model(Nmc=1000)
+            
+    #----- Compute the rms if available
+    if noise_mc is not None:
+        rms = np.std(gaussian_filter(noise_mc,
+                                     sigma=np.array([0,1,1])*visu_smooth/2.35/data.header['CDELT2']/3600),
+                     axis=0)
+        levels = [-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2,
+                  2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
+
+    #----- Compute plot range
+    rng_map = [np.amin(gaussian_filter(model_ymap_sph,
+                                       sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5),
+               np.amax(gaussian_filter(model_ymap_sph,
+                                       sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5)]
+    
+    stdres = np.std((gaussian_filter(data.image-model_ymap_sph,
+                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5)[mask > 0])
+    rng_res = np.array([-1,1]) * stdres * 3
+    
+    #----- Show the maps
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(0, figsize=(20, 5))
+
+    # Input data
+    ax = plt.subplot(1, 3, 1, projection=WCS(data.header))
+    plt.imshow(mask * gaussian_filter(data.image,
+                                      sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5,
+               cmap=cmap, vmin=rng_map[0], vmax=rng_map[1])
+    cb = plt.colorbar()
+    plt.contour(mask*gaussian_filter(data.image,
+                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)/rms,
+                levels=levels, colors=contcol)
+    plt.title('y-Compton data')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel('Dec. (deg)')
+    
+    # Best model
+    ax = plt.subplot(1, 3, 2, projection=WCS(data.header))
+    plt.imshow(gaussian_filter(model_ymap_sph,
+                               sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5,
+               cmap=cmap, vmin=rng_map[0], vmax=rng_map[1])
+    cb = plt.colorbar()
+    plt.title('y-Compton best-fit')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel('Dec. (deg)')
+
+    # Best model residual
+    ax = plt.subplot(1, 3, 3, projection=WCS(data.header))
+    plt.imshow(gaussian_filter(data.image - model_ymap_sph,
+                               sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5*mask,
+               cmap=cmap,
+               vmin=rng_res[0], vmax=rng_res[1])
+    cb = plt.colorbar()
+    plt.contour(mask*gaussian_filter(data.image-model_ymap_sph,
+                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)/rms,
+                levels=levels, colors=contcol)
+    plt.title('y-Compton residual')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel('Dec. (deg)')
+    plt.savefig(figfile)
+    plt.close()

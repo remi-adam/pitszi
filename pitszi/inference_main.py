@@ -209,12 +209,93 @@ def defpar_lnlike_profile(fitpar_profile, model,
     return par_list, par0_value, par0_err, par_min, par_max
 
 
+#========== The the model to the best fit recovered profile
+def set_bestfit_profile(model,
+                        sampler,
+                        burnin,
+                        fitpar_profile,
+                        fitpar_center=None,
+                        fitpar_ellipticity=None):
+    """
+    Set the model to the best-fit profile parameters
+        
+    Parameters
+    ----------
+    - model (pitszi object): pitszi object from class Model
+    - sampler (emcee object): the sampler
+    - burnin (int): the number of mcmc points to burnin
+    - fitpar_profile (dict): see get_smooth_model_forward_fitting
+    - fitpar_center (dict): see get_smooth_model_forward_fitting
+    - fitpar_ellipticity (dict): see get_smooth_model_forward_fitting
+
+    Outputs
+    ----------
+    - model (float): the value of the likelihood
+
+    """
+    
+    #---------- Extract best fit param
+    param_chains = sampler.chain[:, burnin:, :]
+    lnL_chains   = sampler.lnprobability[:, burnin:]
+    par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
+    lnL_flat = lnL_chains.reshape(lnL_chains.shape[0]*lnL_chains.shape[1])
+    wbest = np.where(lnL_flat == np.amax(lnL_flat))[0][0]
+    par_best = par_flat[wbest]
+
+    idx_par = 0
+
+    #---------- Profile parameters
+    parkeys_prof = list(fitpar_profile.keys())
+    for ipar in range(len(parkeys_prof)):
+        parkey = parkeys_prof[ipar]
+        if fitpar_profile[parkey]['unit'] is not None:
+            unit = fitpar_profile[parkey]['unit']
+        else:
+            unit = 1
+        model.model_pressure_profile[parkey] = par_best[idx_par] * unit
+        idx_par += 1
+
+    #---------- Center parameters
+    if fitpar_center is not None:
+        if 'RA' in fitpar_center:
+            RA = par_best[idx_par]
+            unit1 = fitpar_center['RA']['unit']
+            idx_par += 1
+        else:
+            RA = self.model.coord.icrs.ra.to_value('deg')
+            unit1 = u.deg
+        if 'Dec' in fitpar_center:
+            Dec = par_best[idx_par]
+            unit2 = fitpar_center['Dec']['unit']
+            idx_par += 1
+        else:
+            Dec = self.model.coord.icrs.dec.to_value('deg')
+            unit2 = u.deg
+
+        model.coord = SkyCoord(RA*unit1, Dec*unit2, frame='icrs')
+        
+    #---------- Ellipticity parameters
+    if fitpar_ellipticity is not None:
+        axis_ratio = par_best[idx_par]
+        idx_par += 1
+        angle = par_best[idx_par]
+        angle_unit = fitpar_ellipticity['angle']['unit']
+        idx_par += 1
+        model.triaxiality = {'min_to_maj_axis_ratio':axis_ratio,
+                             'int_to_maj_axis_ratio':axis_ratio,
+                             'euler_angle1':0*u.deg,
+                             'euler_angle2':90*u.deg,
+                             'euler_angle3':angle*angle_unit}
+
+    return model
+
+
 #========== lnL function for the profile file
 global get_lnlike_profile # Must be global and here to avoid pickling errors
 def get_lnlike_profile(param,
                        param_info_profile,
                        model,
-                       data_img, data_rms, data_mask,
+                       data_img, data_noiseprop, data_mask,
                        data_psf, data_tf,
                        param_info_center=None, param_info_ellipticity=None, param_info_ZL=None,
                        use_covmat=False):
@@ -227,16 +308,15 @@ def get_lnlike_profile(param,
     - param_info_profile (dict): see fitpar_profile in get_smooth_model_forward_fitting
     - model (class Model object): the model to be updated
     - data_img (nd array): the image data
-    - data_rms (nd_array): the covariance matrix to be used for the fit. If the shape is the 
-    same as the map, it is assumed to be the variance. If the shape is Npix x Npix, it is 
-    used as the covariance and the map are flattened for chi2 calculations.
+    - data_noiseprop (nd_array): the inverse covariance matrix to be used for the fit or the rms,
+    depending on use_covmat.
     - data_mask (nd array): the image mask
     - data_psf (quantity): input to model_mock.get_sz_map
     - data_tf (dict): input to model_mock.get_sz_map
     - param_info_center (dict): see fitpar_center in get_smooth_model_forward_fitting
     - param_info_ellipticity (dict): see fitpar_ellipticity in get_smooth_model_forward_fitting
     - param_info_ZL (dict): see fitpar_ZL in get_smooth_model_forward_fitting
-    - use_covmat (bool): if True, assumes that data_rms is the inverse noise covariance matrix
+    - use_covmat (bool): if True, assumes that data_noiseprop is the inverse noise covariance matrix
 
     Outputs
     ----------
@@ -404,9 +484,9 @@ def get_lnlike_profile(param,
     #========== Compute the likelihood
     if use_covmat:
         flat_resid = (data_mask * (model_img - data_img)).flatten()
-        lnL = -0.5*np.matmul(flat_resid, np.matmul(data_rms, flat_resid))
+        lnL = -0.5*np.matmul(flat_resid, np.matmul(data_noiseprop, flat_resid))
     else:
-        lnL = -0.5*np.nansum(data_mask**2 * (model_img - data_img)**2 / data_rms**2)
+        lnL = -0.5*np.nansum(data_mask**2 * (model_img - data_img)**2 / data_noiseprop**2)
 
     lnL += prior
     
@@ -665,7 +745,7 @@ def get_lnlike_fluctuation(param,
         #covmat_model = covmat_model_ref
         #covariance = covmat_noise + covmat_model
         vec_test = model_pk2d-data_pk2d
-        covariance_inverse = np.linalg.inv(covmat)
+        covariance_inverse = np.linalg.pinv(covmat)
         lnL = -0.5*np.matmul(vec_test, np.matmul(covariance_inverse, vec_test))
     else:
         # Rescale noise using Pk/Pk_rms is cte
@@ -824,8 +904,9 @@ class Inference():
                                          fitpar_center=None,
                                          fitpar_ellipticity=None,
                                          fitpar_ZL=None,
-                                         set_best_fit=False,
-                                         use_covmat=False):
+                                         use_covmat=False,
+                                         set_best_fit=True,
+                                         show_bestfit=False):
         """
         This function fits the data with a defined model
         
@@ -851,9 +932,11 @@ class Inference():
         'min_to_maj_axis_ratio' and 'angle'
         - fitpar_ZL (dictionary): same as fitpar_profile with accepted parameter
         'ZL'
-        - set_best_fit (bool): set the best fit model to the best fit parameters
         - use_covmat (bool): if True, the inverse noise covariance matrix is used instead 
         of the noise rms
+        - set_best_fit (bool): set the best fit model to the best fit parameters
+        - show_best_fit (bool): show the best fit model and residual. If true, set_best_fit
+        will automatically be true
 
         Outputs
         ----------
@@ -863,22 +946,22 @@ class Inference():
         """
         
         #========== Check if the MCMC sampler was already recorded
-        sampler_file = self.output_dir+'/pitszi_MCMC_profile_sampler.h5'        
-        sampler_exist = os.path.exists(sampler_file)
-        if sampler_exist:
-            print('----- Existing sampler: '+sampler_file)
-        else:
-            print('----- No existing sampler found')
+        sampler_file = self.output_dir+'/pitszi_MCMC_profile_sampler.h5'
+        sampler_exist = utils.check_sampler_exist(sampler_file, silent=False)
             
         #========== Defines the fit parameters
-        par_list, par0_value, par0_err, par_min, par_max =  defpar_lnlike_profile(fitpar_profile,
-                                                                                  self.model,
-                                                                                  fitpar_ZL=fitpar_ZL,
-                                                                                  fitpar_center=fitpar_center,
-                                                                                  fitpar_ellipticity=fitpar_ellipticity)
+        # Fit parameter list and information
+        par_list,par0_value,par0_err,par_min,par_max = defpar_lnlike_profile(fitpar_profile,
+                                                                             self.model,
+                                                                             fitpar_ZL=fitpar_ZL,
+                                                                             fitpar_center=fitpar_center,
+                                                                             fitpar_ellipticity=fitpar_ellipticity)
         ndim = len(par0_value)
-        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
         
+        # Starting points of the chains
+        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
+        if sampler_exist and (not self.mcmc_reset): pos = None
+            
         print('----- Fit parameters information -----')
         print('      - Fitted parameters:            ')
         print(par_list)
@@ -895,34 +978,19 @@ class Inference():
 
         #========== Deal with how the noise should be accounted for
         if use_covmat:
-            if self.data.noise_invcovmat is None:
-                raise ValueError('Trying to use the noise inverse covariance matrix, but this is undefined')
-            noise_property = self.data.noise_invcovmat
+            if self.data.noise_covmat is None:
+                raise ValueError('Trying to use the noise covariance matrix, but this is undefined')
+            noise_property = np.linalg.pinv(self.data.noise_covmat)
         else:
             if self.data.noise_rms is None:
                 raise ValueError('Trying to use the noise rms, but this is undefined')
             noise_property = self.data.noise_rms
 
         #========== Define the MCMC setup
-        backend = emcee.backends.HDFBackend(sampler_file)
-        
-        print('----- Does the sampler already exist? -----')
-        if sampler_exist:
-            if self.mcmc_reset:
-                print('      - Yes, but reset the MCMC even though the sampler already exists')
-                backend.reset(self.mcmc_nwalkers, ndim)
-            else:
-                print('      - Yes, use the existing MCMC sampler')
-                print("      - Initial size: {0}".format(backend.iteration))
-                pos = None
-        else:
-            print('      - No, start from scratch')
-            backend.reset(self.mcmc_nwalkers, ndim)
-        
+        backend = utils.define_emcee_backend(sampler_file, sampler_exist,
+                                             self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
         moves = emcee.moves.StretchMove(a=2.0)
-        
-        sampler = emcee.EnsembleSampler(self.mcmc_nwalkers,
-                                        ndim,
+        sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         get_lnlike_profile, 
                                         args=[fitpar_profile,
                                               self.model,
@@ -945,59 +1013,21 @@ class Inference():
             print('      - Not running, but restoring the existing sampler')
 
         #========== Set the best-fit model
+        if show_bestfit: set_best_fit = True
+        
         if set_best_fit:
-            param_chains = sampler.chain[:, self.mcmc_burnin:, :]
-            lnL_chains   = sampler.lnprobability[:, self.mcmc_burnin:]
-            par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
-            lnL_flat = lnL_chains.reshape(lnL_chains.shape[0]*lnL_chains.shape[1])
-            wbest = np.where(lnL_flat == np.amax(lnL_flat))[0][0]
-            par_best = par_flat[wbest]
-
-            idx_par = 0
-
-            #---------- Profile parameters
-            parkeys_prof = list(fitpar_profile.keys())
-            for ipar in range(len(parkeys_prof)):
-                parkey = parkeys_prof[ipar]
-                if fitpar_profile[parkey]['unit'] is not None:
-                    unit = fitpar_profile[parkey]['unit']
-                else:
-                    unit = 1
-                self.model.model_pressure_profile[parkey] = par_best[idx_par] * unit
-                idx_par += 1
-
-            #---------- Center parameters
-            if fitpar_center is not None:
-                if 'RA' in fitpar_center:
-                    RA = par_best[idx_par]
-                    unit1 = fitpar_center['RA']['unit']
-                    idx_par += 1
-                else:
-                    RA = self.model.coord.icrs.ra.to_value('deg')
-                    unit1 = u.deg
-                if 'Dec' in fitpar_center:
-                    Dec = par_best[idx_par]
-                    unit2 = fitpar_center['Dec']['unit']
-                    idx_par += 1
-                else:
-                    Dec = self.model.coord.icrs.dec.to_value('deg')
-                    unit2 = u.deg
-        
-                self.model.coord = SkyCoord(RA*unit1, Dec*unit2, frame='icrs')
-        
-            #---------- Ellipticity parameters
-            if fitpar_ellipticity is not None:
-                axis_ratio = par_best[idx_par]
-                idx_par += 1
-                angle = par_best[idx_par]
-                angle_unit = fitpar_ellipticity['angle']['unit']
-                idx_par += 1
-                self.model.triaxiality = {'min_to_maj_axis_ratio':axis_ratio,
-                                          'int_to_maj_axis_ratio':axis_ratio,
-                                          'euler_angle1':0*u.deg,
-                                          'euler_angle2':90*u.deg,
-                                          'euler_angle3':angle*angle_unit}
+            self.model = set_bestfit_profile(self.model, sampler, self.mcmc_burnin, fitpar_profile,
+                                             fitpar_center=fitpar_center, fitpar_ellipticity=fitpar_ellipticity)
                 
+        #========== Show best-fit
+        if show_bestfit:
+            model_ymap_sph = self.model.get_sz_map(no_fluctuations=True,
+                                                   irfs_convolution_beam=self.data.psf_fwhm,
+                                                   irfs_convolution_TF=self.data.transfer_function)
+            plotlib.show_best_fit_smoothmap_results(self.output_dir+'/MCMC_best_fit_profile.pdf',
+                                                    self.data, model_ymap_sph,
+                                                    visu_smooth=10)                
+        
         return par_list, sampler
 
     
@@ -1043,20 +1073,20 @@ class Inference():
         """
 
         #========== Check if the MCMC sampler was already recorded
-        sampler_file = self.output_dir+'/pitszi_MCMC_fluctuation_sampler.h5'        
-        sampler_exist = os.path.exists(sampler_file)
-        if sampler_exist:
-            print('----- Existing sampler: '+sampler_file)
-        else:
-            print('----- No existing sampler found')
+        sampler_file = self.output_dir+'/pitszi_MCMC_fluctuation_sampler.h5'
+        sampler_exist = utils.check_sampler_exist(sampler_file, silent=False)
             
         #========== Defines the fit parameters
+        # Fit parameter list and information
         par_list, par0_value, par0_err, par_min, par_max =  defpar_lnlike_fluct(fitpar_pk3d,
                                                                                 self.model,
                                                                                 fitpar_noise=fitpar_noise)
         ndim = len(par0_value)
-        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
         
+        # Starting points of the chains
+        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
+        if sampler_exist and (not self.mcmc_reset): pos = None
+
         print('----- Fit parameters information -----')
         print('      - Fitted parameters:            ')
         print(par_list)
@@ -1071,6 +1101,7 @@ class Inference():
         print('      - Number of dimensions:         ')
         print(ndim)
 
+        '''
         #========== Deal with input images and Pk
         #---------- Input image
         model_ymap_sph_deconv = self.model.get_sz_map(no_fluctuations=True,
@@ -1155,26 +1186,13 @@ class Inference():
             print('You may pass the bin edges directly for specific bining strategies.')
             raise ValueError('Issue with binning')
         
+        '''
+
         #========== Define the MCMC setup
-        backend = emcee.backends.HDFBackend(sampler_file)
-        
-        print('----- Does the sampler already exist? -----')
-        if sampler_exist:
-            if self.mcmc_reset:
-                print('      - Yes, but reset the MCMC even though the sampler already exists')
-                backend.reset(self.mcmc_nwalkers, ndim)
-            else:
-                print('      - Yes, use the existing MCMC sampler')
-                print("      - Initial size: {0}".format(backend.iteration))
-                pos = None
-        else:
-            print('      - No, start from scratch')
-            backend.reset(self.mcmc_nwalkers, ndim)
-        
+        backend = utils.define_emcee_backend(sampler_file, sampler_exist,
+                                             self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
         moves = emcee.moves.KDEMove()
-        
-        sampler = emcee.EnsembleSampler(self.mcmc_nwalkers,
-                                        ndim,
+        sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         get_lnlike_fluctuation,
                                         args=[fitpar_pk3d,
                                               self.method_fluctuation_image,
@@ -1198,7 +1216,7 @@ class Inference():
                                               True,
                                               noise_pk2d_covmat+model_pk2d_covmat,
                                         ],
-                                        #pool=Pool(cpu_count()),
+                                        pool=Pool(cpu_count()),
                                         moves=moves,
                                         backend=backend)
         
@@ -1235,7 +1253,6 @@ class Inference():
         return par_list, sampler
 
 
-    '''
     #==================================================
     # Extract Pk 3D from deprojection
     #==================================================
@@ -1245,7 +1262,6 @@ class Inference():
 
         return
 
-    '''
     
     #==================================================
     # Window function

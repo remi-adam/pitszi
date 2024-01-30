@@ -14,6 +14,7 @@ from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
 import copy
+import pickle
 
 from minot.ClusterTools import map_tools
 from pitszi import utils
@@ -58,13 +59,16 @@ class Data():
     def __init__(self,
                  image,
                  header,
-                 mask=None,
-                 psf_fwhm=18*u.arcsec,
+                 psf_fwhm=0*u.arcsec,
                  transfer_function=None,
-                 jackknife=None,
-                 noise_covmat=None,
+                 mask=None,
+                 noise_jackknife=None,
                  noise_rms=None,
+                 noise_covmat=None,
+                 noise_model_pk_center=None,
+                 noise_model_radial=None,
                  silent=False,
+                 output_dir='./pitszi_output',
     ):
         """
         Initialize the data object.
@@ -73,13 +77,25 @@ class Data():
         ----------
         - image (2d np.array): data
         - header (str): header of the data
-        
+        - psf_fwhm=0*u.arcsec,
+        - transfer_function=None,
+        - mask (2d np.array): mask associated with image
+        - noise_jackknife (2d np.array): jacknife map associated with image
+        - noise_rms (2d np.array): rms associated with the image
+        - noise_covmat (2d np.array): noise covariance matrix associated with flattened image
+        - noise_model_pk_center (function): function that give the noise Pk as a function of k in arcsec^-1
+        - noise_model_radial (function):  function that give the noise amplitude as a function of radial
+        distance from the center r in arcsec (make sense to have 1 in the center)
+        - silent (bool)
+        - output_dir (str): directory where saving outputs
+
         """
 
         kref = np.linspace(0, 1, 1000)*u.arcsec**-1
         
-        # Talk to user?
-        self.silent = silent
+        # Admin
+        self.silent     = True
+        self.output_dir = output_dir
         
         # Image data as a 2D np array, in Compton parameter unit
         self.image = image
@@ -104,11 +120,31 @@ class Data():
             self.transfer_function = transfer_function
 
         # Description of the noise
-        self.noise_jackknife       = jackknife
+        self.noise_jackknife       = noise_jackknife
         self.noise_rms             = noise_rms
         self.noise_covmat          = noise_covmat
-        self.noise_model_pk_center = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1 # output in [y] x arcsec^2
-        self.noise_model_radial    = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    # output unitless
+        self.noise_model_pk_center = noise_model_pk_center # output in [y] x arcsec^2
+        self.noise_model_radial    = noise_model_radial    # output unitless
+        
+
+    #==================================================
+    # Set reference noise model
+    #==================================================
+
+    def set_nika2_reference_noise_model(self):
+        """
+        Set the noise model according to a typical baseline model.
+        
+        Parameters
+        ----------
+        
+        """
+
+        # output in [y] x arcsec^2
+        self.noise_model_pk_center = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1
+
+        # output unitless
+        self.noise_model_radial    = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    
         
         
     #==================================================
@@ -156,6 +192,13 @@ class Data():
         - noise (nd array): the noise monte carlo cube
 
         """
+
+        # Check that the covariance exists
+        if self.noise_model_pk_center is None or self.noise_model_radial is None:
+            if not self.silent:
+                print('The noise model (noise_model_pk_center, noise_model_radial) is undefined')
+                print('while it is requested for get_noise_monte_carlo_from_model')
+            return
         
         # Set a seed
         np.random.seed(seed)
@@ -286,43 +329,72 @@ class Data():
         self.noise_covmat = covmat
 
         return covmat
+    
 
-        
     #==================================================
-    # Set the noise inverse covariance from the covariance
+    # Save the noise covariance matrix
     #==================================================
-
-    def set_inverse_covariance(self):
+    
+    def save_noise_covariance(self):
         """
-        Set the noise inverse covariance from the covariance
+        Save the noise covariance matrix to avoid long
+        computation time
         
         Parameters
         ----------
-
+        
         Outputs
         ----------
-        - ic (nd array): the inverse noise covariance
+        - file is saved
+        """
+        
+        with open(self.output_dir+'/data_noise_covariance_matrix.pkl', 'wb') as pfile:
+            pickle.dump(self.noise_covmat, pfile, pickle.HIGHEST_PROTOCOL)
+
+
+    #==================================================
+    # Read saved noise covariance matrix
+    #==================================================
+    
+    def load_noise_covariance(self):
+        """
+        Read the noise covariance matrix
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        
+        """
+        
+        with open(self.output_dir+'/data_noise_covariance_matrix.pkl', 'rb') as pfile:
+            par = pickle.load(pfile)
+            
+        self.noise_covmat = par
+    
+
+    #==================================================
+    # Measure noise from JackKnife
+    #==================================================
+    
+    def set_noise_properties_from_jackknife(self):
+        """
+        Compute a noise MC realization from the noise covariance
+        matrix.
+        
+        Parameters
+        ----------
+        - Nmc (int): the number of map to compute in the cube
+        - seed (int): the 
+        
+        Outputs
+        ----------
+        - noise (nd array): noise MC cube
         """
 
-        if self.noise_covmat is not None:
 
-            if not self.silent:
-                sh = self.image.shape
-                shcm = sh[0]*sh[1]
-                print('Inverting the covariance matrix can take some a long time for large maps')
-                print('Here the covariance is '+str(shcm)+'x'+str(shcm)+' pixels')
-                
-            icov = np.linalg.inv(self.noise_covmat)
-            self.noise_invcovmat = icov
-
-            return icov
         
-        else:
-            if not self.silent:
-                print('The covariance matrix needs to be defined to compute its inverse')
-            return
-                
-    
     #==================================================
     # Generate Mock data
     #==================================================
@@ -391,24 +463,3 @@ class Data():
 
         return image_mock
         
-
-    #==================================================
-    # Measure noise from JackKnife
-    #==================================================
-    
-    def set_noise_properties_from_jackknife(self):
-        """
-        Compute a noise MC realization from the noise covariance
-        matrix.
-        
-        Parameters
-        ----------
-        - Nmc (int): the number of map to compute in the cube
-        - seed (int): the 
-        
-        Outputs
-        ----------
-        - noise (nd array): noise MC cube
-        """
-
-

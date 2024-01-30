@@ -3,12 +3,14 @@ This file contains utilities for various making calculations used in pitszi
 
 """
 
+import os
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter, fourier_gaussian
 import scipy.stats as stats
 from scipy.special import gamma
 import astropy.units as u
+import emcee
 
 
 #==================================================
@@ -485,6 +487,72 @@ def emcee_starting_point(guess_value, guess_error, par_min, par_max, nwalkers):
     
     return start
 
+
+#==================================================
+# Check if the sampler exists
+#==================================================
+
+def check_sampler_exist(sampler_file, silent=False):
+    """
+    Check if the sampler already exists
+        
+    Parameters
+    ----------
+    - sampler_file (str): the filename of the sampler
+    - silent (bool): to show or not info
+
+    Output
+    ------
+    sampler_exist (bool): true if sampler exist, false otherwise
+
+    """
+
+    sampler_exist = os.path.exists(sampler_file)
+    
+    if not silent:
+        if sampler_exist:
+            print('----- Existing sampler: '+sampler_file)
+        else:
+            print('----- No existing sampler found')
+
+    return sampler_exist
+
+
+#==================================================
+# Define backend
+#==================================================
+
+def define_emcee_backend(sampler_file, sampler_exist, mcmc_reset, nwalkers, ndim, silent=False):
+    """
+    Define the backend used for emcee
+        
+    Parameters
+    ----------
+    - sampler_file (str): the filename of the sampler
+    - silent (bool): to show or not info
+
+    Output
+    ------
+    backend (emcee object): the backend to be used for mcmc run
+
+    """
+
+    backend = emcee.backends.HDFBackend(sampler_file)
+        
+    if not silent: print('----- Does the sampler already exist? -----')
+    if sampler_exist:
+        if mcmc_reset:
+            if not silent: print('      - Yes, but reset the MCMC even though the sampler already exists')
+            backend.reset(nwalkers, ndim)
+        else:
+            if not silent: print('      - Yes, use the existing MCMC sampler')
+            if not silent: print("      - Initial size: {0}".format(backend.iteration))
+    else:
+        print('      - No, start from scratch')
+        backend.reset(self.mcmc_nwalkers, ndim)
+        
+    return backend
+    
 
 #==================================================
 # Compute chain statistics
