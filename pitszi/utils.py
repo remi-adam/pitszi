@@ -552,6 +552,36 @@ def define_emcee_backend(sampler_file, sampler_exist, mcmc_reset, nwalkers, ndim
         backend.reset(self.mcmc_nwalkers, ndim)
         
     return backend
+
+
+#==================================================
+# Define backend
+#==================================================
+
+def get_emcee_bestfit_param(sampler,
+                            burnin=0):
+    """
+    Extract the best fit parameters from the sampler
+        
+    Parameters
+    ----------
+    - sampler (emcee sampler): the sampler
+    - burnin (int): remove the first samples of the chains
+
+    Output
+    ------
+    par_best (list): the best_fit parameters
+
+    """
+
+    param_chains = sampler.chain[:, burnin:, :]
+    lnL_chains   = sampler.lnprobability[:, burnin:]
+    par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
+    lnL_flat = lnL_chains.reshape(lnL_chains.shape[0]*lnL_chains.shape[1])
+    wbest = np.where(lnL_flat == np.amax(lnL_flat))[0][0]
+    par_best = par_flat[wbest]
+
+    return par_best
     
 
 #==================================================
@@ -682,26 +712,27 @@ def get_pk3d(cube, proj_reso, los_reso,
     fourier_pk = fourier_pk.flatten()
 
     # Define the bins
-    if kmin is None:
-        kmin_sampling = np.amin(k3d_norm[k3d_norm > 0])
-    else:
-        kmin_sampling = kmin
-    if kmax is None:
-        kmax_sampling = np.amax(k3d_norm)
-    else:
-        kmax_sampling = kmax        
-        
-    if scalebin == 'lin':
-        kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-    elif scalebin == 'log':
-        kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
-    else:
-        raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
-
     if kedges is None:
-        kbins = kbins
+        if kmin is None:
+            kmin_sampling = np.amin(k3d_norm[k3d_norm > 0])
+        else:
+            kmin_sampling = kmin
+            
+        if kmax is None:
+            kmax_sampling = np.amax(k3d_norm)
+        else:
+            kmax_sampling = kmax
+            
+        if scalebin == 'lin':
+            kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
+        elif scalebin == 'log':
+            kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
+        else:
+            raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
+        
     else:
         kbins = kedges
+        
     kvals = 0.5 * (kbins[1:] + kbins[:-1])
 
     # Bin the Pk
@@ -764,26 +795,27 @@ def get_pk2d(image, proj_reso,
     fourier_pk = fourier_pk.flatten()
     
     # Define the bins
-    if kmin is None:
-        kmin_sampling = np.amin(k2d_norm[k2d_norm > 0])
-    else:
-        kmin_sampling = kmin
-    if kmax is None:
-        kmax_sampling = np.amax(k2d_norm)
-    else:
-        kmax_sampling = kmax
-        
-    if scalebin == 'lin':
-        kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-    elif scalebin == 'log':
-        kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
-    else:
-        raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
-
     if kedges is None:
-        kbins = kbins
+        if kmin is None:
+            kmin_sampling = np.amin(k2d_norm[k2d_norm > 0])
+        else:
+            kmin_sampling = kmin
+            
+        if kmax is None:
+            kmax_sampling = np.amax(k2d_norm)
+        else:
+            kmax_sampling = kmax
+            
+        if scalebin == 'lin':
+            kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
+        elif scalebin == 'log':
+            kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
+        else:
+            raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
+        
     else:
         kbins = kedges
+        
     kvals = 0.5 * (kbins[1:] + kbins[:-1])
 
     # Bin the Pk
