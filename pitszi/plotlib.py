@@ -7,11 +7,14 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
 from astropy.wcs import WCS
+import astropy.units as u
 import matplotlib.pyplot as plt
 import corner
 import seaborn as sns
 import pandas as pd
 import warnings
+from minot.ClusterTools.map_tools import radial_profile_sb
+
 
 #==================================================
 # Plot MCMC chains
@@ -520,10 +523,15 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
 # Plot of the best-fit profile
 #==================================================
 
-def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
-                                    visu_smooth=10,
-                                    cmap='Spectral_r',
-                                    contcol='k'):
+def show_best_fit_radial_profile(figfile,
+                                 image,
+                                 header,
+                                 noise_mc,
+                                 model,
+                                 model_best,
+                                 model_MC,
+                                 mask=None,
+                                 binsize=5):
     '''
     This function plots the best fit profile model
     
@@ -532,6 +540,97 @@ def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
     - figfile (str): name of the file to produce
     - data (pitszi object): data object from pitszi
     - model_ymap_sph (2d image): the best fit model
+    - bin_size (float): bin size in arcsec
+    
+    Output:
+    -------
+    - Plots produced
+    '''
+
+    #----- Get extra data info
+    if mask is None:
+        mask = image*0+1
+        
+    #----- Compute the rms if available
+    rms = np.std(noise_mc,axis=0)
+    rms = rms/mask**2
+    rms[~np.isfinite(rms)] = np.nan
+    
+    # Compute data
+    data_prof = radial_profile_sb(image, 
+                                  (model.coord.icrs.ra.to_value('deg'),
+                                   model.coord.icrs.dec.to_value('deg')), 
+                                  stddev=rms, header=header, 
+                                  binsize=(binsize*u.arcsec).to_value('deg'))
+
+    # Compute uncertainty
+    Nmc  = len(noise_mc[:,0,0])
+    Nbin = len(data_prof[0])
+    mc_prof = np.zeros((Nmc, Nbin))
+    for i in range(Nmc):
+        mc_prof[i,:] = radial_profile_sb(noise_mc[i,:,:], 
+                                         (model.coord.icrs.ra.to_value('deg'),
+                                          model.coord.icrs.dec.to_value('deg')), 
+                                         stddev=rms, header=header, 
+                                         binsize=(binsize*u.arcsec).to_value('deg'))[1]
+    prof_std = np.std(mc_prof, axis=0)
+
+    # Compute best-fit    
+    best_prof = radial_profile_sb(model_best, 
+                                  (model.coord.icrs.ra.to_value('deg'),
+                                   model.coord.icrs.dec.to_value('deg')), 
+                                  stddev=image*0+1, header=model.get_map_header(), 
+                                  binsize=(binsize*u.arcsec).to_value('deg'))
+
+    # Compute model uncertainties
+    Nmc = model_MC.shape[0]
+    mc_model_prof = np.zeros((Nmc, Nbin))
+    for imc in range(Nmc):
+        mc_model_prof[imc,:] = radial_profile_sb(model_MC[imc,:,:], 
+                                                 (model.coord.icrs.ra.to_value('deg'),
+                                                  model.coord.icrs.dec.to_value('deg')), 
+                                                 stddev=image*0+1, header=model.get_map_header(), 
+                                                 binsize=(binsize*u.arcsec).to_value('deg'))[1]
+    model_perc = np.percentile(mc_model_prof, (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
+
+    #----- Plot the result
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(0, figsize=(7, 5))
+    plt.errorbar(data_prof[0]*60, data_prof[1], prof_std, marker='o', ls='', color='k', label='Data')
+    plt.plot(best_prof[0]*60, best_prof[1], color='r', ls='--', label='Best-fit model')
+    plt.fill_between(best_prof[0]*60, model_perc[0,:], y2=model_perc[2,:], alpha=0.3, color='blue')
+    plt.plot(best_prof[0]*60, model_perc[0,:], color='b', ls=':', label='median and 68% limits')
+    plt.plot(best_prof[0]*60, model_perc[1,:], color='b', ls='-')
+    plt.plot(best_prof[0]*60, model_perc[2,:], color='b', ls=':')
+    plt.xlabel('radius (arcmin)')
+    plt.ylabel('Surface brightness ([y])')
+    plt.legend(fontsize=12)
+    plt.savefig(figfile)
+    plt.close()
+        
+
+#==================================================
+# Plot of the best-fit map
+#==================================================
+
+def show_best_fit_radial_map(figfile,
+                             image, header, noise_mc,
+                             model_ymap_sph,
+                             mask=None,
+                             visu_smooth=10,
+                             cmap='Spectral_r',
+                             contcol='k'):
+    '''
+    This function plots the best fit map model
+    
+    Parameters:
+    ----------
+    - figfile (str): name of the file to produce
+    - image (2d array): the data image
+    - header (str): the header
+    - noise_mc (3d array): the noise MC realization
+    - model_ymap_sph (2d image): the best fit model
+    - mask (2d array): the mask if any
     - visu_smooth (float): the smoothing FWHM in arcsec
     - cmap (str): colormap
     - contcol (str): the contour color
@@ -542,28 +641,24 @@ def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
     '''
 
     #----- Get extra data info
-    mask = data.mask
+    if mask is None:
+        mask = image*0+1
 
-    noise_mc = data.get_noise_monte_carlo_from_model(Nmc=1000)
-    if noise_mc is None:
-            noise_mc = data.get_noise_monte_carlo_from_model(Nmc=1000)
-            
-    #----- Compute the rms if available
-    if noise_mc is not None:
-        rms = np.std(gaussian_filter(noise_mc,
-                                     sigma=np.array([0,1,1])*visu_smooth/2.35/data.header['CDELT2']/3600),
-                     axis=0)
-        levels = [-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2,
-                  2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
+    #----- Compute the rms at given scale
+    rms = np.std(gaussian_filter(noise_mc,
+                                 sigma=np.array([0,1,1])*visu_smooth/2.35/header['CDELT2']/3600),
+                 axis=0)
+    levels = [-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2,
+              2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
 
     #----- Compute plot range
     rng_map = [np.amin(gaussian_filter(model_ymap_sph,
-                                       sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5),
+                                       sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5),
                np.amax(gaussian_filter(model_ymap_sph,
-                                       sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5)]
+                                       sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5)]
     
-    stdres = np.std((gaussian_filter(data.image-model_ymap_sph,
-                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5)[mask > 0])
+    stdres = np.std((gaussian_filter(image-model_ymap_sph,
+                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5)[mask > 0])
     rng_res = np.array([-1,1]) * stdres * 3
     
     #----- Show the maps
@@ -571,22 +666,22 @@ def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
     fig = plt.figure(0, figsize=(20, 5))
 
     # Input data
-    ax = plt.subplot(1, 3, 1, projection=WCS(data.header))
-    plt.imshow(mask * gaussian_filter(data.image,
-                                      sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5,
+    ax = plt.subplot(1, 3, 1, projection=WCS(header))
+    plt.imshow(mask * gaussian_filter(image,
+                                      sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5,
                cmap=cmap, vmin=rng_map[0], vmax=rng_map[1])
     cb = plt.colorbar()
-    plt.contour(mask*gaussian_filter(data.image,
-                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)/rms,
+    plt.contour(mask*gaussian_filter(image,
+                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms,
                 levels=levels, colors=contcol)
     plt.title('y-Compton data')
     plt.xlabel('R.A. (deg)')
     plt.ylabel('Dec. (deg)')
     
     # Best model
-    ax = plt.subplot(1, 3, 2, projection=WCS(data.header))
+    ax = plt.subplot(1, 3, 2, projection=WCS(header))
     plt.imshow(gaussian_filter(model_ymap_sph,
-                               sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5,
+                               sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5,
                cmap=cmap, vmin=rng_map[0], vmax=rng_map[1])
     cb = plt.colorbar()
     plt.title('y-Compton best-fit')
@@ -594,17 +689,66 @@ def show_best_fit_smoothmap_results(figfile, data, model_ymap_sph,
     plt.ylabel('Dec. (deg)')
 
     # Best model residual
-    ax = plt.subplot(1, 3, 3, projection=WCS(data.header))
-    plt.imshow(gaussian_filter(data.image - model_ymap_sph,
-                               sigma=visu_smooth/2.35/data.header['CDELT2']/3600)*1e5*mask,
+    ax = plt.subplot(1, 3, 3, projection=WCS(header))
+    plt.imshow(gaussian_filter(image - model_ymap_sph,
+                               sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5*mask,
                cmap=cmap,
                vmin=rng_res[0], vmax=rng_res[1])
     cb = plt.colorbar()
-    plt.contour(mask*gaussian_filter(data.image-model_ymap_sph,
-                                     sigma=visu_smooth/2.35/data.header['CDELT2']/3600)/rms,
+    plt.contour(mask*gaussian_filter(image-model_ymap_sph,
+                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms,
                 levels=levels, colors=contcol)
     plt.title('y-Compton residual')
     plt.xlabel('R.A. (deg)')
     plt.ylabel('Dec. (deg)')
+    plt.savefig(figfile)
+    plt.close()
+    
+
+#==================================================
+# Plot of contraint on Pk3d
+#==================================================
+
+def show_pk3d_contraint(figfile, k3d, pk3d_best, pk3d_mc):
+    '''
+    This function plots the deprojected constraint on Pk3d
+    given the 2d fit.
+    
+    Parameters:
+    ----------
+    - figfile (str): name of the file to produce
+    
+    Output:
+    -------
+    - Plots produced
+    '''
+
+    perc = np.percentile(pk3d_mc, (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
+
+    plt.rcParams.update({'font.size': 14})
+    fig = plt.figure(0, figsize=(8, 6))
+
+    plt.loglog(k3d.to_value('kpc-1'), np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*pk3d_best.to_value('kpc3')),
+               color='r', label='Best-fit')
+
+    for imc in range(pk3d_mc.shape[0]):
+        plt.loglog(k3d.to_value('kpc-1'), np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*pk3d_mc[imc, :]),
+                   alpha=0.1, color='b')
+
+    plt.fill_between(k3d.to_value('kpc-1'),
+                     np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*perc[0,:]),
+                     np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*perc[2,:]),
+                     color='blue', alpha=0.3)
+    plt.loglog(k3d.to_value('kpc-1'), np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*perc[0,:]), color='b', ls=':')
+    plt.loglog(k3d.to_value('kpc-1'), np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*perc[1,:]),
+               color='b', ls='-', label='68% confidence limit')
+    plt.loglog(k3d.to_value('kpc-1'), np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*perc[2,:]), color='b', ls=':')
+
+    plt.xlabel('k (kpc$^{-1}$)')
+    plt.ylabel(r'$\sqrt{4 \pi k^3 P(k)}$')
+    plt.ylim(np.amax(np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*pk3d_best.to_value('kpc3')))*1e-5,
+             np.amax(np.sqrt(4*np.pi*k3d.to_value('kpc-1')**3*pk3d_best.to_value('kpc3')))*1e1)
+    plt.xlim(np.amin(k3d.to_value('kpc-1')), np.amax(k3d.to_value('kpc-1')))
+    plt.legend()
     plt.savefig(figfile)
     plt.close()

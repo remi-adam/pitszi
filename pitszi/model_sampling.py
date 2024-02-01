@@ -262,18 +262,22 @@ class ModelSampling(object):
               '] kpc ; [',
               "{:^10.3f}".format(fov_arcsec[0]),',',
               "{:^10.3f}".format(fov_arcsec[1]),'] arcmin')
-        print('   L.o.S. resolution :  ', "{:^10.1f}".format(los_reso),' kpc')
+        print('   L.o.S. resolution :     ', "{:^10.1f}".format(los_reso),' kpc')
         print('   Map center :  ', self.get_map_center())
         k_proj = np.fft.fftfreq(Nx, reso_arcsec)
-        print('   k min/max projected :  ',
+        print('   k min/max projected :     ',
               "{:^10.6f}".format(np.amin(k_proj[k_proj>0])),'/',
               "{:^10.6f}".format(np.amax(k_proj)),' 1/arcsec')
         k_proj = np.fft.fftfreq(Nx, proj_reso)
-        print('   k min/max projected :  ',
+        print('   k min/max projected :     ',
               "{:^10.6f}".format(np.amin(k_proj[k_proj>0])),'/',
               "{:^10.6f}".format(np.amax(k_proj)), ' 1/kpc')
         k_z = np.fft.fftfreq(Nz, los_reso)
-        print('   k min/max L.o.S. :  ',
+        conv = self.D_ang.to_value('kpc')/(1*u.rad).to_value('arcsec')
+        print('   k min/max L.o.S. (eq.) :  ',
+              "{:^10.6f}".format(conv*np.amin(k_z[k_z>0])),'/',
+              "{:^10.6f}".format(conv*np.amax(k_z)), ' 1/arcsec')
+        print('   k min/max L.o.S. :        ',
               "{:^10.6f}".format(np.amin(k_z[k_z>0])),'/',
               "{:^10.6f}".format(np.amax(k_z)), ' 1/kpc')
         print('=====================================================')

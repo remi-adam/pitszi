@@ -511,7 +511,8 @@ def check_sampler_exist(sampler_file, silent=False):
     
     if not silent:
         if sampler_exist:
-            print('----- Existing sampler: '+sampler_file)
+            print('----- Existing sampler:')
+            print('      '+sampler_file)
         else:
             print('----- No existing sampler found')
 
@@ -549,13 +550,13 @@ def define_emcee_backend(sampler_file, sampler_exist, mcmc_reset, nwalkers, ndim
             if not silent: print("      - Initial size: {0}".format(backend.iteration))
     else:
         print('      - No, start from scratch')
-        backend.reset(self.mcmc_nwalkers, ndim)
+        backend.reset(nwalkers, ndim)
         
     return backend
 
 
 #==================================================
-# Define backend
+# Extract best-fit parameters
 #==================================================
 
 def get_emcee_bestfit_param(sampler,
@@ -582,7 +583,37 @@ def get_emcee_bestfit_param(sampler,
     par_best = par_flat[wbest]
 
     return par_best
+
+
+#==================================================
+# Extract random parameters from the chains
+#==================================================
+
+def get_emcee_random_param(sampler,
+                           burnin=0,
+                           Nmc=100):
+    """
+    Extract Nmc random set of parameter from the chain
+        
+    Parameters
+    ----------
+    - sampler (emcee sampler): the sampler
+    - burnin (int): remove the first samples of the chains
+    - Nmc (int): number of parameter set to extract
+
+    Output
+    ------
+    param (list): the parameters grid (Nmc x Nparam)
+
+    """
+
+    param_chains = sampler.chain[:, burnin:, :]
+    par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
+    loc = np.random.randint(0, par_flat.shape[0]-1, size=Nmc)
+    pars = par_flat[loc,:]
     
+    return pars
+
 
 #==================================================
 # Compute chain statistics
@@ -658,8 +689,6 @@ def chains_statistics(param_chains,
         file.close() 
             
     return par_best, par_percentile
-
-
 
 
 #==================================================

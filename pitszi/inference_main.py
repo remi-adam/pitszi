@@ -27,11 +27,11 @@ from pitszi import plotlib
 # Likelihood: Profile parameter definition
 #==================================================
 
-def lnlike_defpar_profile(fitpar_profile,
+def lnlike_defpar_profile(parinfo_profile,
                           model,
-                          fitpar_center=None,
-                          fitpar_ellipticity=None,
-                          fitpar_ZL=None):
+                          parinfo_center=None,
+                          parinfo_ellipticity=None,
+                          parinfo_ZL=None):
     """
     This function helps defining the parameter list, initial values and
     ranges for the profile fitting. 
@@ -44,11 +44,11 @@ def lnlike_defpar_profile(fitpar_profile,
         
     Parameters
     ----------
-    - fitpar_profile (dict): see fitpar_profile in get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see parinfo_profile in get_smooth_model_forward_fitting
     - model (class Model object): the model to be updated in the fit
-    - fitpar_center (dict): see fitpar_center in get_smooth_model_forward_fitting
-    - fitpar_ellipticity (dict): see fitpar_ellipticity in get_smooth_model_forward_fitting
-    - fitpar_ZL (dict): see fitpar_ZL in get_smooth_model_forward_fitting
+    - parinfo_center (dict): see parinfo_center in get_smooth_model_forward_fitting
+    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_smooth_model_forward_fitting
+    - parinfo_ZL (dict): see parinfo_ZL in get_smooth_model_forward_fitting
 
     Outputs
     ----------
@@ -68,107 +68,107 @@ def lnlike_defpar_profile(fitpar_profile,
     par_max = []
     
     #========== Deal with profile parameters
-    Npar_profile = len(list(fitpar_profile.keys()))
+    Npar_profile = len(list(parinfo_profile.keys()))
     for ipar in range(Npar_profile):
         
-        parkey = list(fitpar_profile.keys())[ipar]
+        parkey = list(parinfo_profile.keys())[ipar]
 
         #----- Check that the param is ok wrt the model
         try:
             bid = model.model_pressure_profile[parkey]
         except:
             raise ValueError('The parameter '+parkey+' is not in self.model')    
-        if 'guess' not in fitpar_profile[parkey]:
+        if 'guess' not in parinfo_profile[parkey]:
             raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-        if 'unit' not in fitpar_profile[parkey]:
+        if 'unit' not in parinfo_profile[parkey]:
             raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
         #----- Update the name list
         par_list.append(parkey)
 
         #----- Update the guess values
-        par0_value.append(fitpar_profile[parkey]['guess'][0])
-        par0_err.append(fitpar_profile[parkey]['guess'][1])
+        par0_value.append(parinfo_profile[parkey]['guess'][0])
+        par0_err.append(parinfo_profile[parkey]['guess'][1])
 
         #----- Update the limit values
-        if 'limit' in fitpar_profile[parkey]:
-            par_min.append(fitpar_profile[parkey]['limit'][0])
-            par_max.append(fitpar_profile[parkey]['limit'][1])
+        if 'limit' in parinfo_profile[parkey]:
+            par_min.append(parinfo_profile[parkey]['limit'][0])
+            par_max.append(parinfo_profile[parkey]['limit'][1])
         else:
             par_min.append(-np.inf)
             par_max.append(+np.inf)
             
     #========== Deal with center
-    if fitpar_center is not None:
-        Npar_ctr = len(list(fitpar_center.keys()))
+    if parinfo_center is not None:
+        Npar_ctr = len(list(parinfo_center.keys()))
         list_ctr_allowed = ['RA', 'Dec']
 
         # Check that we have first RA, then Dec
         if Npar_ctr == 2:
-            if list(fitpar_center.keys())[0] != 'RA':
+            if list(parinfo_center.keys())[0] != 'RA':
                 raise ValueError('The center parameters should be RA, Dec, with this order')
         
         for ipar in range(Npar_ctr):
 
-            parkey = list(fitpar_center.keys())[ipar]
+            parkey = list(parinfo_center.keys())[ipar]
 
             #----- Check that the param is ok wrt the model
             if parkey not in list_ctr_allowed:
-                raise ValueError('fitpar_center allowed param are RA, Dec only, in that order')
-            if 'guess' not in fitpar_center[parkey]:
+                raise ValueError('parinfo_center allowed param are RA, Dec only, in that order')
+            if 'guess' not in parinfo_center[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-            if 'unit' not in fitpar_center[parkey]:
+            if 'unit' not in parinfo_center[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
             #----- Update the name list
             par_list.append(parkey)
 
             #----- Update the guess values
-            par0_value.append(fitpar_center[parkey]['guess'][0])
-            par0_err.append(fitpar_center[parkey]['guess'][1])
+            par0_value.append(parinfo_center[parkey]['guess'][0])
+            par0_err.append(parinfo_center[parkey]['guess'][1])
 
             #----- Update the limit values
-            if 'limit' in fitpar_center[parkey]:
-                par_min.append(fitpar_center[parkey]['limit'][0])
-                par_max.append(fitpar_center[parkey]['limit'][1])
+            if 'limit' in parinfo_center[parkey]:
+                par_min.append(parinfo_center[parkey]['limit'][0])
+                par_max.append(parinfo_center[parkey]['limit'][1])
             else:
                 par_min.append(-np.inf)
                 par_max.append(+np.inf)
                 
     #========== Deal ellipticity
-    if fitpar_ellipticity is not None:
-        Npar_ell = len(list(fitpar_ellipticity.keys()))
+    if parinfo_ellipticity is not None:
+        Npar_ell = len(list(parinfo_ellipticity.keys()))
         list_ell_allowed = ['min_to_maj_axis_ratio', 'angle']
 
-        # Check that we have first fitpar_ellipticity, then angle
+        # Check that we have first parinfo_ellipticity, then angle
         if Npar_ell != 2:
             raise ValueError('The ellipticity parameters should be min_to_maj_axis_ratio and angle, the two being mandatory')
-        if list(fitpar_ellipticity.keys())[0] != 'min_to_maj_axis_ratio':
+        if list(parinfo_ellipticity.keys())[0] != 'min_to_maj_axis_ratio':
             raise ValueError('The ellipticity parameters should be min_to_maj_axis_ratio, angle, with this order')
             
         for ipar in range(Npar_ell):
 
-            parkey = list(fitpar_ellipticity.keys())[ipar]
+            parkey = list(parinfo_ellipticity.keys())[ipar]
 
             #----- Check that the param is ok wrt the model
             if parkey not in list_ell_allowed:
-                raise ValueError('fitpar_ellipticity allowed param are min_to_maj_axis_ratio, angle only')
-            if 'guess' not in fitpar_ellipticity[parkey]:
+                raise ValueError('parinfo_ellipticity allowed param are min_to_maj_axis_ratio, angle only')
+            if 'guess' not in parinfo_ellipticity[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-            if 'unit' not in fitpar_ellipticity[parkey]:
+            if 'unit' not in parinfo_ellipticity[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
             #----- Update the name list
             par_list.append(parkey)
 
             #----- Update the guess values
-            par0_value.append(fitpar_ellipticity[parkey]['guess'][0])
-            par0_err.append(fitpar_ellipticity[parkey]['guess'][1])
+            par0_value.append(parinfo_ellipticity[parkey]['guess'][0])
+            par0_err.append(parinfo_ellipticity[parkey]['guess'][1])
 
             #----- Update the limit values
-            if 'limit' in fitpar_ellipticity[parkey]:
-                par_min.append(fitpar_ellipticity[parkey]['limit'][0])
-                par_max.append(fitpar_ellipticity[parkey]['limit'][1])
+            if 'limit' in parinfo_ellipticity[parkey]:
+                par_min.append(parinfo_ellipticity[parkey]['limit'][0])
+                par_max.append(parinfo_ellipticity[parkey]['limit'][1])
             else:
                 if parkey == 'min_to_maj_axis_ratio':
                     par_min.append(0)
@@ -178,33 +178,33 @@ def lnlike_defpar_profile(fitpar_profile,
                     par_max.append(+90)
 
     #========== Deal with offset
-    if fitpar_ZL is not None:
-        Npar_zl = len(list(fitpar_ZL.keys()))
+    if parinfo_ZL is not None:
+        Npar_zl = len(list(parinfo_ZL.keys()))
         list_zl_allowed = ['ZL']
         
         for ipar in range(Npar_zl):
 
-            parkey = list(fitpar_ZL.keys())[ipar]
+            parkey = list(parinfo_ZL.keys())[ipar]
 
             #----- Check that the param is ok wrt the model
             if parkey not in list_zl_allowed:
-                raise ValueError('fitpar_ZL allowed param is ZL only')
-            if 'guess' not in fitpar_ZL[parkey]:
+                raise ValueError('parinfo_ZL allowed param is ZL only')
+            if 'guess' not in parinfo_ZL[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-            if 'unit' not in fitpar_ZL[parkey]:
+            if 'unit' not in parinfo_ZL[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
             #----- Update the name list
             par_list.append(parkey)
 
             #----- Update the guess values
-            par0_value.append(fitpar_ZL[parkey]['guess'][0])
-            par0_err.append(fitpar_ZL[parkey]['guess'][1])
+            par0_value.append(parinfo_ZL[parkey]['guess'][0])
+            par0_err.append(parinfo_ZL[parkey]['guess'][1])
 
             #----- Update the limit values
-            if 'limit' in fitpar_ZL[parkey]:
-                par_min.append(fitpar_ZL[parkey]['limit'][0])
-                par_max.append(fitpar_ZL[parkey]['limit'][1])
+            if 'limit' in parinfo_ZL[parkey]:
+                par_min.append(parinfo_ZL[parkey]['limit'][0])
+                par_max.append(parinfo_ZL[parkey]['limit'][1])
             else:
                 par_min.append(-np.inf)
                 par_max.append(+np.inf)
@@ -223,18 +223,18 @@ def lnlike_defpar_profile(fitpar_profile,
 # Likelihood: Fluctuation parameter definition
 #==================================================
     
-def lnlike_defpar_fluct(fitpar_fluct,
+def lnlike_defpar_fluct(parinfo_pk3d,
                         model,
-                        fitpar_noise=None):
+                        parinfo_noise=None):
     """
     This function helps defining the parameter list, initial values and
     ranges for the fluctuation fitting.
         
     Parameters
     ----------
-    - fitpar_fluct (dict): see fitpar_fluct in get_pk3d_model_forward_fitting
+    - parinfo_pk3d (dict): see parinfo_pk3d in get_pk3d_model_forward_fitting
     - model (class Model object): the model to be updated in the fit
-    - fitpar_noise (dictionary): same as fitpar_fluct with accepted parameter 'Noise'
+    - parinfo_noise (dictionary): same as parinfo_pk3d with accepted parameter 'Noise'
 
     Outputs
     ----------
@@ -254,64 +254,64 @@ def lnlike_defpar_fluct(fitpar_fluct,
     par_max = []
     
     #========== Deal with fluctuation parameters
-    Npar_fluct = len(list(fitpar_fluct.keys()))
+    Npar_fluct = len(list(parinfo_pk3d.keys()))
     for ipar in range(Npar_fluct):
         
-        parkey = list(fitpar_fluct.keys())[ipar]
+        parkey = list(parinfo_pk3d.keys())[ipar]
 
         #----- Check that the param is ok wrt the model
         try:
             bid = model.model_pressure_fluctuation[parkey]
         except:
             raise ValueError('The parameter '+parkey+' is not in self.model')    
-        if 'guess' not in fitpar_fluct[parkey]:
+        if 'guess' not in parinfo_pk3d[parkey]:
             raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-        if 'unit' not in fitpar_fluct[parkey]:
+        if 'unit' not in parinfo_pk3d[parkey]:
             raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
         #----- Update the name list
         par_list.append(parkey)
 
         #----- Update the guess values
-        par0_value.append(fitpar_fluct[parkey]['guess'][0])
-        par0_err.append(fitpar_fluct[parkey]['guess'][1])
+        par0_value.append(parinfo_pk3d[parkey]['guess'][0])
+        par0_err.append(parinfo_pk3d[parkey]['guess'][1])
 
         #----- Update the limit values
-        if 'limit' in fitpar_fluct[parkey]:
-            par_min.append(fitpar_fluct[parkey]['limit'][0])
-            par_max.append(fitpar_fluct[parkey]['limit'][1])
+        if 'limit' in parinfo_pk3d[parkey]:
+            par_min.append(parinfo_pk3d[parkey]['limit'][0])
+            par_max.append(parinfo_pk3d[parkey]['limit'][1])
         else:
             par_min.append(-np.inf)
             par_max.append(+np.inf)
 
     #========== Deal with noise normalization
-    if fitpar_noise is not None:
-        Npar_noise = len(list(fitpar_noise.keys()))
+    if parinfo_noise is not None:
+        Npar_noise = len(list(parinfo_noise.keys()))
         list_noise_allowed = ['noise']
         
         for ipar in range(Npar_noise):
 
-            parkey = list(fitpar_noise.keys())[ipar]
+            parkey = list(parinfo_noise.keys())[ipar]
 
             #----- Check that the param is ok wrt the model
             if parkey not in list_noise_allowed:
-                raise ValueError('fitpar_noise allowed param is noise only')
-            if 'guess' not in fitpar_noise[parkey]:
+                raise ValueError('parinfo_noise allowed param is noise only')
+            if 'guess' not in parinfo_noise[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-            if 'unit' not in fitpar_noise[parkey]:
+            if 'unit' not in parinfo_noise[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
             #----- Update the name list
             par_list.append(parkey)
 
             #----- Update the guess values
-            par0_value.append(fitpar_noise[parkey]['guess'][0])
-            par0_err.append(fitpar_noise[parkey]['guess'][1])
+            par0_value.append(parinfo_noise[parkey]['guess'][0])
+            par0_err.append(parinfo_noise[parkey]['guess'][1])
 
             #----- Update the limit values
-            if 'limit' in fitpar_noise[parkey]:
-                par_min.append(fitpar_noise[parkey]['limit'][0])
-                par_max.append(fitpar_noise[parkey]['limit'][1])
+            if 'limit' in parinfo_noise[parkey]:
+                par_min.append(parinfo_noise[parkey]['limit'][0])
+                par_max.append(parinfo_noise[parkey]['limit'][1])
             else:
                 par_min.append(-np.inf)
                 par_max.append(+np.inf)
@@ -331,10 +331,10 @@ def lnlike_defpar_fluct(fitpar_fluct,
 #==================================================
 
 def lnlike_prior_profile(param,
-                         fitpar_profile,
-                         fitpar_center=None,
-                         fitpar_ellipticity=None,
-                         fitpar_ZL=None):
+                         parinfo_profile,
+                         parinfo_center=None,
+                         parinfo_ellipticity=None,
+                         parinfo_ZL=None):
     """
     Compute the prior given the input parameter and some information
     about the parameters given by the user
@@ -342,10 +342,10 @@ def lnlike_prior_profile(param,
     Parameters
     ----------
     - param (list): the parameter to apply to the model
-    - fitpar_profile (dict): see get_smooth_model_forward_fitting
-    - fitpar_center (dict): see get_smooth_model_forward_fitting
-    - fitpar_ellipticity (dict): see get_smooth_model_forward_fitting
-    - fitpar_ZL (dict): see get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see get_smooth_model_forward_fitting
+    - parinfo_center (dict): see get_smooth_model_forward_fitting
+    - parinfo_ellipticity (dict): see get_smooth_model_forward_fitting
+    - parinfo_ZL (dict): see get_smooth_model_forward_fitting
 
     Outputs
     ----------
@@ -357,91 +357,91 @@ def lnlike_prior_profile(param,
     idx_par = 0
     
     #---------- Profile parameters
-    parkeys_prof = list(fitpar_profile.keys())
+    parkeys_prof = list(parinfo_profile.keys())
 
     for ipar in range(len(parkeys_prof)):
         parkey = parkeys_prof[ipar]
         
         # Flat prior
-        if 'limit' in fitpar_profile[parkey]:
-            if param[idx_par] < fitpar_profile[parkey]['limit'][0]:
+        if 'limit' in parinfo_profile[parkey]:
+            if param[idx_par] < parinfo_profile[parkey]['limit'][0]:
                 return -np.inf                
-            if param[idx_par] > fitpar_profile[parkey]['limit'][1]:
+            if param[idx_par] > parinfo_profile[parkey]['limit'][1]:
                 return -np.inf
             
         # Gaussian prior
-        if 'prior' in fitpar_profile[parkey]:
-            expected = fitpar_profile[parkey]['prior'][0]
-            sigma = fitpar_profile[parkey]['prior'][1]
+        if 'prior' in parinfo_profile[parkey]:
+            expected = parinfo_profile[parkey]['prior'][0]
+            sigma = parinfo_profile[parkey]['prior'][1]
             prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
         # Increase param index
         idx_par += 1
         
     #---------- Center parameters
-    if fitpar_center is not None:
-        parkeys_ctr = list(fitpar_center.keys())
+    if parinfo_center is not None:
+        parkeys_ctr = list(parinfo_center.keys())
         
-        for ipar in range(len(fitpar_center)):
+        for ipar in range(len(parinfo_center)):
             parkey = parkeys_ctr[ipar]
             
             # Flat prior
-            if 'limit' in fitpar_center[parkey]:
-                if param[idx_par] < fitpar_center[parkey]['limit'][0]:
+            if 'limit' in parinfo_center[parkey]:
+                if param[idx_par] < parinfo_center[parkey]['limit'][0]:
                     return -np.inf                
-                if param[idx_par] > fitpar_center[parkey]['limit'][1]:
+                if param[idx_par] > parinfo_center[parkey]['limit'][1]:
                     return -np.inf
                 
             # Gaussian prior
-            if 'prior' in fitpar_center[parkey]:
-                expected = fitpar_center[parkey]['prior'][0]
-                sigma = fitpar_center[parkey]['prior'][1]
+            if 'prior' in parinfo_center[parkey]:
+                expected = parinfo_center[parkey]['prior'][0]
+                sigma = parinfo_center[parkey]['prior'][1]
                 prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
             # Increase param index
             idx_par += 1
 
     #---------- Ellipticity parameters
-    if fitpar_ellipticity is not None:
-        parkeys_ell = list(fitpar_ellipticity.keys())
+    if parinfo_ellipticity is not None:
+        parkeys_ell = list(parinfo_ellipticity.keys())
         
-        for ipar in range(len(fitpar_ellipticity)):
+        for ipar in range(len(parinfo_ellipticity)):
             parkey = parkeys_ell[ipar]
             
             # Flat prior
-            if 'limit' in fitpar_ellipticity[parkey]:
-                if param[idx_par] < fitpar_ellipticity[parkey]['limit'][0]:
+            if 'limit' in parinfo_ellipticity[parkey]:
+                if param[idx_par] < parinfo_ellipticity[parkey]['limit'][0]:
                     return -np.inf                
-                if param[idx_par] > fitpar_ellipticity[parkey]['limit'][1]:
+                if param[idx_par] > parinfo_ellipticity[parkey]['limit'][1]:
                     return -np.inf
                 
             # Gaussian prior
-            if 'prior' in fitpar_ellipticity[parkey]:
-                expected = fitpar_ellipticity[parkey]['prior'][0]
-                sigma = fitpar_ellipticity[parkey]['prior'][1]
+            if 'prior' in parinfo_ellipticity[parkey]:
+                expected = parinfo_ellipticity[parkey]['prior'][0]
+                sigma = parinfo_ellipticity[parkey]['prior'][1]
                 prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
             # Increase param index
             idx_par += 1
         
     #---------- Offset parameters
-    if fitpar_ZL is not None:
-        parkeys_zl = list(fitpar_ZL.keys())
+    if parinfo_ZL is not None:
+        parkeys_zl = list(parinfo_ZL.keys())
         
-        for ipar in range(len(fitpar_ZL)):
+        for ipar in range(len(parinfo_ZL)):
             parkey = parkeys_zl[ipar]
             
             # Flat prior
-            if 'limit' in fitpar_ZL[parkey]:
-                if param[idx_par] < fitpar_ZL[parkey]['limit'][0]:
+            if 'limit' in parinfo_ZL[parkey]:
+                if param[idx_par] < parinfo_ZL[parkey]['limit'][0]:
                     return -np.inf                
-                if param[idx_par] > fitpar_ZL[parkey]['limit'][1]:
+                if param[idx_par] > parinfo_ZL[parkey]['limit'][1]:
                     return -np.inf
                 
             # Gaussian prior
-            if 'prior' in fitpar_ZL[parkey]:
-                expected = fitpar_ZL[parkey]['prior'][0]
-                sigma = fitpar_ZL[parkey]['prior'][1]
+            if 'prior' in parinfo_ZL[parkey]:
+                expected = parinfo_ZL[parkey]['prior'][0]
+                sigma = parinfo_ZL[parkey]['prior'][1]
                 prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
             # Increase param index
@@ -459,8 +459,8 @@ def lnlike_prior_profile(param,
 #==================================================
 
 def lnlike_prior_fluct(param,
-                       fitpar_fluct,
-                       fitpar_noise=None):
+                       parinfo_pk3d,
+                       parinfo_noise=None):
     """
     Compute the prior given the input parameter and some information
     about the parameters given by the user
@@ -468,8 +468,8 @@ def lnlike_prior_fluct(param,
     Parameters
     ----------
     - param (list): the parameter to apply to the model
-    - fitpar_fluct (dict): see get_pk3d_model_forward_fitting
-    - fitpar_noise (dict): see get_pk3d_model_forward_fitting
+    - parinfo_pk3d (dict): see get_pk3d_model_forward_fitting
+    - parinfo_noise (dict): see get_pk3d_model_forward_fitting
 
     Outputs
     ----------
@@ -481,45 +481,45 @@ def lnlike_prior_fluct(param,
     idx_par = 0
 
     #---------- Fluctuation parameters
-    parkeys_fluct = list(fitpar_fluct.keys())
+    parkeys_fluct = list(parinfo_pk3d.keys())
 
     for ipar in range(len(parkeys_fluct)):
         parkey = parkeys_fluct[ipar]
         
         # Flat prior
-        if 'limit' in fitpar_fluct[parkey]:
-            if param[idx_par] < fitpar_fluct[parkey]['limit'][0]:
+        if 'limit' in parinfo_pk3d[parkey]:
+            if param[idx_par] < parinfo_pk3d[parkey]['limit'][0]:
                 return -np.inf                
-            if param[idx_par] > fitpar_fluct[parkey]['limit'][1]:
+            if param[idx_par] > parinfo_pk3d[parkey]['limit'][1]:
                 return -np.inf
             
         # Gaussian prior
-        if 'prior' in fitpar_fluct[parkey]:
-            expected = fitpar_fluct[parkey]['prior'][0]
-            sigma = fitpar_fluct[parkey]['prior'][1]
+        if 'prior' in parinfo_pk3d[parkey]:
+            expected = parinfo_pk3d[parkey]['prior'][0]
+            sigma = parinfo_pk3d[parkey]['prior'][1]
             prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
         # Increase param index
         idx_par += 1
 
     #---------- Noise parameters
-    if fitpar_noise is not None:
-        parkeys_noise = list(fitpar_noise.keys())
+    if parinfo_noise is not None:
+        parkeys_noise = list(parinfo_noise.keys())
         
-        for ipar in range(len(fitpar_noise)):
+        for ipar in range(len(parinfo_noise)):
             parkey = parkeys_noise[ipar]
             
             # Flat prior
-            if 'limit' in fitpar_noise[parkey]:
-                if param[idx_par] < fitpar_noise[parkey]['limit'][0]:
+            if 'limit' in parinfo_noise[parkey]:
+                if param[idx_par] < parinfo_noise[parkey]['limit'][0]:
                     return -np.inf                
-                if param[idx_par] > fitpar_noise[parkey]['limit'][1]:
+                if param[idx_par] > parinfo_noise[parkey]['limit'][1]:
                     return -np.inf
                 
             # Gaussian prior
-            if 'prior' in fitpar_noise[parkey]:
-                expected = fitpar_noise[parkey]['prior'][0]
-                sigma = fitpar_noise[parkey]['prior'][1]
+            if 'prior' in parinfo_noise[parkey]:
+                expected = parinfo_noise[parkey]['prior'][0]
+                sigma = parinfo_noise[parkey]['prior'][1]
                 prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
             # Increase param index
@@ -538,10 +538,10 @@ def lnlike_prior_fluct(param,
 
 def lnlike_setpar_profile(param,
                           model,
-                          fitpar_profile,
-                          fitpar_center=None,
-                          fitpar_ellipticity=None,
-                          fitpar_ZL=None):
+                          parinfo_profile,
+                          parinfo_center=None,
+                          parinfo_ellipticity=None,
+                          parinfo_ZL=None):
     """
     Set the model to the given profile parameters.
         
@@ -549,10 +549,10 @@ def lnlike_setpar_profile(param,
     ----------
     - param (list): the parameter to apply to the model
     - model (pitszi object): pitszi object from class Model
-    - fitpar_profile (dict): see get_smooth_model_forward_fitting
-    - fitpar_center (dict): see get_smooth_model_forward_fitting
-    - fitpar_ellipticity (dict): see get_smooth_model_forward_fitting
-    - fitpar_ZL (dict): see get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see get_smooth_model_forward_fitting
+    - parinfo_center (dict): see get_smooth_model_forward_fitting
+    - parinfo_ellipticity (dict): see get_smooth_model_forward_fitting
+    - parinfo_ZL (dict): see get_smooth_model_forward_fitting
 
     Outputs
     ----------
@@ -564,28 +564,28 @@ def lnlike_setpar_profile(param,
     idx_par = 0
 
     #---------- Profile parameters
-    parkeys_prof = list(fitpar_profile.keys())
+    parkeys_prof = list(parinfo_profile.keys())
     for ipar in range(len(parkeys_prof)):
         parkey = parkeys_prof[ipar]
-        if fitpar_profile[parkey]['unit'] is not None:
-            unit = fitpar_profile[parkey]['unit']
+        if parinfo_profile[parkey]['unit'] is not None:
+            unit = parinfo_profile[parkey]['unit']
         else:
             unit = 1
         model.model_pressure_profile[parkey] = param[idx_par] * unit
         idx_par += 1
 
     #---------- Center parameters
-    if fitpar_center is not None:
-        if 'RA' in fitpar_center:
+    if parinfo_center is not None:
+        if 'RA' in parinfo_center:
             RA = param[idx_par]
-            unit1 = fitpar_center['RA']['unit']
+            unit1 = parinfo_center['RA']['unit']
             idx_par += 1
         else:
             RA = self.model.coord.icrs.ra.to_value('deg')
             unit1 = u.deg
-        if 'Dec' in fitpar_center:
+        if 'Dec' in parinfo_center:
             Dec = param[idx_par]
-            unit2 = fitpar_center['Dec']['unit']
+            unit2 = parinfo_center['Dec']['unit']
             idx_par += 1
         else:
             Dec = self.model.coord.icrs.dec.to_value('deg')
@@ -594,11 +594,11 @@ def lnlike_setpar_profile(param,
         model.coord = SkyCoord(RA*unit1, Dec*unit2, frame='icrs')
         
     #---------- Ellipticity parameters
-    if fitpar_ellipticity is not None:
+    if parinfo_ellipticity is not None:
         axis_ratio = param[idx_par]
         idx_par += 1
         angle = param[idx_par]
-        angle_unit = fitpar_ellipticity['angle']['unit']
+        angle_unit = parinfo_ellipticity['angle']['unit']
         idx_par += 1
         model.triaxiality = {'min_to_maj_axis_ratio':axis_ratio,
                              'int_to_maj_axis_ratio':axis_ratio,
@@ -607,7 +607,7 @@ def lnlike_setpar_profile(param,
                              'euler_angle3':angle*angle_unit}
 
     #---------- Zero level parameters
-    if fitpar_ZL is not None:
+    if parinfo_ZL is not None:
         ZL = param[idx_par]
         idx_par += 1
     else:
@@ -628,8 +628,8 @@ def lnlike_setpar_profile(param,
     
 def lnlike_setpar_fluct(param,
                         model,
-                        fitpar_fluct,
-                        fitpar_noise=None):
+                        parinfo_pk3d,
+                        parinfo_noise=None):
     """
     Set the model to the given fluctuation parameters
         
@@ -637,8 +637,8 @@ def lnlike_setpar_fluct(param,
     ----------
     - param (list): the parameters to apply to the model
     - model (pitszi object): pitszi object from class Model
-    - fitpar_fluct (dict): see get_pk3d_model_forward_fitting
-    - fitpar_noise (dict): see get_pk3d_model_forward_fitting
+    - parinfo_pk3d (dict): see get_pk3d_model_forward_fitting
+    - parinfo_noise (dict): see get_pk3d_model_forward_fitting
 
     Outputs
     ----------
@@ -650,11 +650,11 @@ def lnlike_setpar_fluct(param,
     idx_par = 0
 
     #---------- Fluctuation parameters
-    parkeys_fluct = list(fitpar_fluct.keys())
+    parkeys_fluct = list(parinfo_pk3d.keys())
     for ipar in range(len(parkeys_fluct)):
         parkey = parkeys_fluct[ipar]
-        if fitpar_fluct[parkey]['unit'] is not None:
-            unit = fitpar_fluct[parkey]['unit']
+        if parinfo_pk3d[parkey]['unit'] is not None:
+            unit = parinfo_pk3d[parkey]['unit']
         else:
             unit = 1
         model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
@@ -662,7 +662,7 @@ def lnlike_setpar_fluct(param,
 
 
     #---------- Noise parameters
-    if fitpar_noise is not None:
+    if parinfo_noise is not None:
         noise_ampli = param[idx_par]
         idx_par += 1
     else:
@@ -683,11 +683,11 @@ def lnlike_setpar_fluct(param,
 # Must be global and here to avoid pickling errors
 global lnlike_profile
 def lnlike_profile(param,
-                   param_info_profile,
+                   parinfo_profile,
                    model,
                    data_img, data_noiseprop, data_mask,
                    data_psf, data_tf,
-                   param_info_center=None, param_info_ellipticity=None, param_info_ZL=None,
+                   parinfo_center=None, parinfo_ellipticity=None, parinfo_ZL=None,
                    use_covmat=False):
     """
     This is the likelihood function used for the fit of the profile.
@@ -695,7 +695,7 @@ def lnlike_profile(param,
     Parameters
     ----------
     - param (np array): the value of the test parameters
-    - param_info_profile (dict): see fitpar_profile in get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see parinfo_profile in get_smooth_model_forward_fitting
     - model (class Model object): the model to be updated
     - data_img (nd array): the image data
     - data_noiseprop (nd_array): the inverse covariance matrix to be used for the fit or the rms,
@@ -703,9 +703,9 @@ def lnlike_profile(param,
     - data_mask (nd array): the image mask
     - data_psf (quantity): input to model_mock.get_sz_map
     - data_tf (dict): input to model_mock.get_sz_map
-    - param_info_center (dict): see fitpar_center in get_smooth_model_forward_fitting
-    - param_info_ellipticity (dict): see fitpar_ellipticity in get_smooth_model_forward_fitting
-    - param_info_ZL (dict): see fitpar_ZL in get_smooth_model_forward_fitting
+    - parinfo_center (dict): see parinfo_center in get_smooth_model_forward_fitting
+    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_smooth_model_forward_fitting
+    - parinfo_ZL (dict): see parinfo_ZL in get_smooth_model_forward_fitting
     - use_covmat (bool): if True, assumes that data_noiseprop is the inverse noise covariance matrix
 
     Outputs
@@ -715,15 +715,15 @@ def lnlike_profile(param,
     """
     
     #========== Deal with flat and Gaussian priors
-    prior = lnlike_prior_profile(param, param_info_profile,fitpar_center=param_info_center,
-                                 fitpar_ellipticity=param_info_ellipticity,fitpar_ZL=param_info_ZL)
+    prior = lnlike_prior_profile(param, parinfo_profile,parinfo_center=parinfo_center,
+                                 parinfo_ellipticity=parinfo_ellipticity,parinfo_ZL=parinfo_ZL)
     if not np.isfinite(prior): return -np.inf
     
     #========== Change model parameters
-    model, zero_level = lnlike_setpar_profile(param, model, param_info_profile,
-                                              fitpar_center=param_info_center,
-                                              fitpar_ellipticity=param_info_ellipticity,
-                                              fitpar_ZL=param_info_ZL)
+    model, zero_level = lnlike_setpar_profile(param, model, parinfo_profile,
+                                              parinfo_center=parinfo_center,
+                                              parinfo_ellipticity=parinfo_ellipticity,
+                                              parinfo_ZL=parinfo_ZL)
     
     #========== Get the model
     model_img = model.get_sz_map(seed=None, no_fluctuations=True, force_isotropy=False,
@@ -749,37 +749,48 @@ def lnlike_profile(param,
 #==================================================
 # lnL function for the profile file
 #==================================================
-    
-global lnlike_fluct # Must be global and here to avoid pickling errors
+# Must be global and here to avoid pickling errors
+global lnlike_fluct
 def lnlike_fluct(param,
-                 param_info_fluct,
+                 parinfo_pk3d,
                  method_fluctuation_image,
                  model,
-                 model_pk2d_rmsref,
-                 model_pk2d_ref,                           
-                 data_pk2d,
-                 noise_pk2d_rms,
-                 noise_pk2d_mean,
                  model_ymap_sph,
                  model_ymap_sph_deconv,
+                 model_pk2d_covmat_ref,
+                 data_pk2d,
+                 noise_pk2d_covmat,
+                 noise_pk2d_mean,
+                 mask,
                  reso_arcsec,
                  psf_fwhm,
                  transfer_function,
-                 mask,
                  kedges=None,
-                 param_info_noise=None,
-                 use_covmat=False,
-                 covmat=None):
+                 parinfo_noise=None,
+                 use_covmat=False):
     """
     This is the likelihood function used for the forward fit of the fluctuation spectrum.
         
     Parameters
     ----------
     - param (np array): the value of the test parameters
-    - param_info_fluct (dict): see fitpar_fluct in get_pk3d_model_forward_fitting
+    - parinfo_pk3d (dict): see parinfo_pk3d in get_pk3d_model_forward_fitting
+    - method_fluctuation_image (str): the method used to compute the fluctuation image (ratio, subtract)
     - model (class Model object): the model to be updated
-    - param_info_noise (dict): see fitpar_noise in get_pk3d_model_forward_fitting
-
+    - model_ymap_sph (2d array): best-fit smooth model
+    - model_ymap_sph_deconv (2d array): best-fit smooth model deconvolved from TF
+    - model_pk2d_covmat_ref (2d array): model covariance matrix
+    - data_pk2d (1d array): the Pk extracted from the data
+    - noise_pk2d_covmat (2d array): the noise covariance matrix
+    - noise_pk2d_mean (1d array): the mean noise bias expected
+    - mask (2d array): the mask associated with the data
+    - reso_arcsec (float): the resolution in arcsec
+    - psf_fwhm (float): the psf FWHM
+    - transfer_function (dict): the transfer function
+    - kedges (1d array): the edges of the k bins
+    - parinfo_noise (dict): see parinfo_noise in get_pk3d_model_forward_fitting
+    - use_covmat (bool): set to true to use the covariance matrix
+    
     Outputs
     ----------
     - lnL (float): the value of the log likelihood
@@ -787,12 +798,12 @@ def lnlike_fluct(param,
     """
 
     #========== Deal with flat and Gaussian priors
-    prior = lnlike_prior_fluct(param, param_info_fluct,fitpar_noise=param_info_noise)
+    prior = lnlike_prior_fluct(param, parinfo_pk3d,parinfo_noise=parinfo_noise)
     if not np.isfinite(prior): return -np.inf
     
     #========== Change model parameters
-    model, noise_ampli = lnlike_setpar_fluct(param, model, param_info_fluct,
-                                             fitpar_noise=param_info_noise)
+    model, noise_ampli = lnlike_setpar_fluct(param, model, parinfo_pk3d,
+                                             parinfo_noise=parinfo_noise)
     
     #========== Get the model
     #---------- Compute the ymap and fluctuation image
@@ -812,17 +823,14 @@ def lnlike_fluct(param,
     model_pk2d = test_pk + noise_ampli*noise_pk2d_mean
 
     #========== Compute the likelihood
-    if use_covmat:
-        #covmat_model = covmat_model_ref
-        #covariance = covmat_noise + covmat_model
-        vec_test = model_pk2d-data_pk2d
-        covariance_inverse = np.linalg.pinv(covmat)
-        lnL = -0.5*np.matmul(vec_test, np.matmul(covariance_inverse, vec_test))
-    else:
-        # Rescale noise using Pk/Pk_rms is cte
-        #model_pk2d_rms = model_pk2d_rmsref*test_pk/model_pk2d_ref
-        model_pk2d_rms = model_pk2d_rmsref
-        lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / (noise_pk2d_rms**2 + model_pk2d_rms**2))
+    if use_covmat: # Using the covariance matrix
+        covariance_inverse = np.linalg.pinv(noise_pk2d_covmat + model_pk2d_covmat_ref)
+        residual_test = model_pk2d - data_pk2d
+        lnL = -0.5*np.matmul(residual_test, np.matmul(covariance_inverse, residual_test))
+        
+    else: # Using the rms only
+        variance = np.diag(noise_pk2d_covmat) + np.diag(model_pk2d_covmat_ref)
+        lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / variance)
         
     lnL += prior
 
@@ -1097,12 +1105,12 @@ class Inference():
     # Compute results for a given MCMC sampling
     #==================================================
     
-    def get_mcmc_output_results(self,
-                                parlist,
-                                sampler,
-                                conf=68.0,
-                                truth=None,
-                                extraname=''):
+    def get_mcmc_chains_outputs_results(self,
+                                       parlist,
+                                       sampler,
+                                       conf=68.0,
+                                       truth=None,
+                                       extraname=''):
         """
         This function can be used to produce automated plots/files
         that give the results of the MCMC samping
@@ -1169,10 +1177,10 @@ class Inference():
     #==================================================
     
     def get_smooth_model_forward_fitting(self,
-                                         fitpar_profile,
-                                         fitpar_center=None,
-                                         fitpar_ellipticity=None,
-                                         fitpar_ZL=None,
+                                         parinfo_profile,
+                                         parinfo_center=None,
+                                         parinfo_ellipticity=None,
+                                         parinfo_ZL=None,
                                          use_covmat=False,
                                          set_best_fit=True,
                                          show_fit_result=False):
@@ -1181,9 +1189,9 @@ class Inference():
         
         Parameters
         ----------
-        - fitpar_profile (dictionary): the model parameters associated with 
+        - parinfo_profile (dictionary): the model parameters associated with 
         self.model.model_pressure_profile to be fit as, e.g., 
-        fitpar_prof = {'P_0':                    # --> Parameter key (mandatory)
+        parinfo_prof = {'P_0':                    # --> Parameter key (mandatory)
                        {'guess':[0.01, 0.001],   # --> initial guess: center, uncertainty (mandatory)
                         'unit': u.keV*u.cm**-3,  # --> unit (mandatory, None if unitless)
                         'limit':[0, np.inf],     # --> Allowed range, i.e. flat prior (optional)
@@ -1195,11 +1203,11 @@ class Inference():
                           'unit': u.kpc, 
                         },
                        }    
-        - fitpar_center (dictionary): same as fitpar_profile with accepted parameters
+        - parinfo_center (dictionary): same as parinfo_profile with accepted parameters
         'RA' and 'Dec'
-        - fitpar_ellipticity (dictionary): same as fitpar_profile with accepted parameters
+        - parinfo_ellipticity (dictionary): same as parinfo_profile with accepted parameters
         'min_to_maj_axis_ratio' and 'angle'
-        - fitpar_ZL (dictionary): same as fitpar_profile with accepted parameter
+        - parinfo_ZL (dictionary): same as parinfo_profile with accepted parameter
         'ZL'
         - use_covmat (bool): if True, the inverse noise covariance matrix is used instead 
         of the noise rms
@@ -1220,11 +1228,11 @@ class Inference():
             
         #========== Defines the fit parameters
         # Fit parameter list and information
-        par_list,par0_value,par0_err,par_min,par_max = lnlike_defpar_profile(fitpar_profile,
-                                                                             self.model,
-                                                                             fitpar_ZL=fitpar_ZL,
-                                                                             fitpar_center=fitpar_center,
-                                                                             fitpar_ellipticity=fitpar_ellipticity)
+        par_list,par0_value,par0_err,par_min,par_max=lnlike_defpar_profile(parinfo_profile,
+                                                                           self.model,
+                                                                           parinfo_ZL=parinfo_ZL,
+                                                                           parinfo_center=parinfo_center,
+                                                                           parinfo_ellipticity=parinfo_ellipticity)
         ndim = len(par0_value)
         
         # Starting points of the chains
@@ -1262,13 +1270,13 @@ class Inference():
         moves = emcee.moves.StretchMove(a=2.0)
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_profile, 
-                                        args=[fitpar_profile,
+                                        args=[parinfo_profile,
                                               self.model,
                                               self.data.image, noise_property,
                                               self.data.mask, self.data.psf_fwhm, self.data.transfer_function,
-                                              fitpar_center,
-                                              fitpar_ellipticity,
-                                              fitpar_ZL,
+                                              parinfo_center,
+                                              parinfo_ellipticity,
+                                              parinfo_ZL,
                                               use_covmat], 
                                         pool=Pool(cpu_count()),
                                         moves=moves,
@@ -1286,20 +1294,62 @@ class Inference():
         if set_best_fit or show_fit_result:
             best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
             best_model, best_ZL = lnlike_setpar_profile(best_par, self.model,
-                                                        fitpar_profile,
-                                                        fitpar_center=fitpar_center,
-                                                        fitpar_ellipticity=fitpar_ellipticity,
-                                                        fitpar_ZL=fitpar_ZL)
+                                                        parinfo_profile,
+                                                        parinfo_center=parinfo_center,
+                                                        parinfo_ellipticity=parinfo_ellipticity,
+                                                        parinfo_ZL=parinfo_ZL)
         
         #========== Show best-fit
         if show_fit_result:
-            model_ymap_sph = best_ZL + best_model.get_sz_map(no_fluctuations=True,
-                                                             irfs_convolution_beam=self.data.psf_fwhm,
-                                                             irfs_convolution_TF=self.data.transfer_function)
-            plotlib.show_best_fit_smoothmap_results(self.output_dir+'/MCMC_best_fit_profile.pdf',
-                                                    self.data, model_ymap_sph,
-                                                    visu_smooth=10)                
-        
+            
+            # Get noise MC 
+            if self.data.noise_covmat is not None:
+                noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=1000)
+            elif (self.data.noise_model_pk_center is not None) and (self.data.noise_model_radial is not None):
+                noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=1000)
+            else:
+                raise ValueError('Noise MC could not be computed when showing results')
+
+            # Compute best fit map
+            best_ymap_sph = best_ZL + best_model.get_sz_map(no_fluctuations=True,
+                                                            irfs_convolution_beam=self.data.psf_fwhm,
+                                                            irfs_convolution_TF=self.data.transfer_function)
+
+            # MC resampling
+            MC_ymap_sph = np.zeros((100, best_ymap_sph.shape[0], best_ymap_sph.shape[1]))
+            MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=100)
+            for i in range(100):
+                mc_model, mc_ZL = lnlike_setpar_profile(MC_pars[i,:], self.model, parinfo_profile,
+                                                        parinfo_center=parinfo_center,
+                                                        parinfo_ellipticity=parinfo_ellipticity,
+                                                        parinfo_ZL=parinfo_ZL)
+                MC_ymap_sph[i,:,:] = mc_ZL + mc_model.get_sz_map(no_fluctuations=True,
+                                                                 irfs_convolution_beam=self.data.psf_fwhm,
+                                                                 irfs_convolution_TF=self.data.transfer_function)
+                                   
+            # plots profile
+            plotlib.show_best_fit_radial_profile(self.output_dir+'/MCMC_radial_best_profile.pdf',
+                                                 self.data.image,
+                                                 self.data.header,
+                                                 noise_mc,
+                                                 self.model,
+                                                 best_ymap_sph,
+                                                 MC_ymap_sph,
+                                                 mask=self.data.mask,
+                                                 binsize=5)
+            
+            # plots map
+            plotlib.show_best_fit_radial_map(self.output_dir+'/MCMC_radial_best_map.pdf',
+                                             self.data.image,
+                                             self.data.header,
+                                             noise_mc,
+                                             best_ymap_sph,
+                                             mask=self.data.mask,
+                                             visu_smooth=10)
+
+            # Make sure the model is the best
+            self.model = best_model
+            
         return par_list, sampler
     
     
@@ -1308,13 +1358,12 @@ class Inference():
     #==================================================
     
     def get_pk3d_model_forward_fitting(self,
-                                       fitpar_pk3d,
-                                       fitpar_noise=None,
+                                       parinfo_pk3d,
+                                       parinfo_noise=None,
                                        Nmc_noise=1000,
                                        method_mc='model',
                                        kbin_edges=None,
                                        use_covmat=False,
-                                       scale_model_variance=False,
                                        set_best_fit=True,
                                        show_fit_result=False):
         """
@@ -1323,9 +1372,9 @@ class Inference():
         
         Parameters
         ----------
-        - fitpar_pk (dictionary): the model parameters associated with 
+        - parinfo_pk (dictionary): the model parameters associated with 
         self.model.model_pressure_fluctuation to be fit as, e.g., 
-        fitpar_pk = {'Norm':                     # --> Parameter key (mandatory)
+        parinfo_pk = {'Norm':                     # --> Parameter key (mandatory)
                        {'guess':[0.5, 0.3],      # --> initial guess: center, uncertainty (mandatory)
                         'unit': None,            # --> unit (mandatory, None if unitless)
                         'limit':[0, np.inf],     # --> Allowed range, i.e. flat prior (optional)
@@ -1354,8 +1403,8 @@ class Inference():
             
         #========== Defines the fit parameters
         # Fit parameter list and information
-        par_list, par0_value, par0_err, par_min, par_max = lnlike_defpar_fluct(fitpar_pk3d, self.model,
-                                                                               fitpar_noise=fitpar_noise)
+        par_list, par0_value, par0_err, par_min, par_max = lnlike_defpar_fluct(parinfo_pk3d, self.model,
+                                                                               parinfo_noise=parinfo_noise)
         ndim = len(par0_value)
         
         # Starting points of the chains
@@ -1411,22 +1460,21 @@ class Inference():
         moves = emcee.moves.KDEMove()
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_fluct,
-                                        args=[fitpar_pk3d,
+                                        args=[parinfo_pk3d,
                                               self.method_fluctuation_image,
                                               self.model,
-                                              model_pk2d_rms,
-                                              model_pk2d_ref,
-                                              data_pk2d,
-                                              noise_pk2d_rms,
-                                              noise_pk2d_mean,
                                               model_ymap_sph,
                                               model_ymap_sph_deconv,
+                                              model_pk2d_covmat,
+                                              data_pk2d,
+                                              noise_pk2d_covmat,
+                                              noise_pk2d_ref,
+                                              self.data.mask,
                                               reso,
                                               self.data.psf_fwhm,
                                               self.data.transfer_function,
-                                              self.data.mask,
                                               kedges,
-                                              fitpar_noise,
+                                              parinfo_noise,
                                               use_covmat],
                                         pool=Pool(cpu_count()),
                                         moves=moves,
@@ -1443,9 +1491,28 @@ class Inference():
         #========== Set the best-fit model
         if set_best_fit:
             best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
-            self.model, best_noise = lnlike_setpar_fluct(best_par, self.model,
-                                                         fitpar_pk3d,
-                                                         fitpar_noise=fitpar_noise)
+            best_model, best_noise = lnlike_setpar_fluct(best_par, self.model,
+                                                         parinfo_pk3d,
+                                                         parinfo_noise=parinfo_noise)
+            
+        #========== Set the best-fit model
+        if show_fit_result:
+            
+            k3d, pk3d_best = best_model.get_pressure_fluctuation_spectrum()
+
+            MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=100)
+            pk3d_mc = np.zeros((100, len(k3d)))
+            for imc in range(100):
+                mc_model, mc_Anoise = lnlike_setpar_fluct(MC_pars[imc,:], self.model, parinfo_pk3d,
+                                                          parinfo_noise=parinfo_noise)                
+                pk3d_mc[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1]
+
+            # Plot the Pk3d constraint
+            plotlib.show_pk3d_contraint(self.output_dir+'/MCMC_fluctuation_constraint_pk3d.pdf',
+                                        k3d, pk3d_best, pk3d_mc)
+
+            # Plot the Pk2d constraint
+            #plotlib.show_pk2d_contraint()
             
         return par_list, sampler
 
