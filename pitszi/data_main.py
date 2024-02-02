@@ -278,7 +278,7 @@ class Data():
 
         # Get the flat noise realization
         target_shape = self.image.shape
-        noise_mc_flat = np.random.multivariate_normal(self.noise_covmat.shape[0],
+        noise_mc_flat = np.random.multivariate_normal(np.zeros(self.noise_covmat.shape[0]),
                                                       self.noise_covmat,
                                                       size=Nmc)
         # Reshape it to maps

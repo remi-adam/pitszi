@@ -19,6 +19,8 @@ import copy
 import emcee
 import corner
 
+from minot.ClusterTools.map_tools import radial_profile_sb
+
 from pitszi import utils
 from pitszi import plotlib
 
@@ -44,11 +46,11 @@ def lnlike_defpar_profile(parinfo_profile,
         
     Parameters
     ----------
-    - parinfo_profile (dict): see parinfo_profile in get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see parinfo_profile in get_radial_model_forward_fitting
     - model (class Model object): the model to be updated in the fit
-    - parinfo_center (dict): see parinfo_center in get_smooth_model_forward_fitting
-    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_smooth_model_forward_fitting
-    - parinfo_ZL (dict): see parinfo_ZL in get_smooth_model_forward_fitting
+    - parinfo_center (dict): see parinfo_center in get_radial_model_forward_fitting
+    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_radial_model_forward_fitting
+    - parinfo_ZL (dict): see parinfo_ZL in get_radial_model_forward_fitting
 
     Outputs
     ----------
@@ -223,7 +225,7 @@ def lnlike_defpar_profile(parinfo_profile,
 # Likelihood: Fluctuation parameter definition
 #==================================================
     
-def lnlike_defpar_fluct(parinfo_pk3d,
+def lnlike_defpar_fluct(parinfo_fluct,
                         model,
                         parinfo_noise=None):
     """
@@ -232,9 +234,9 @@ def lnlike_defpar_fluct(parinfo_pk3d,
         
     Parameters
     ----------
-    - parinfo_pk3d (dict): see parinfo_pk3d in get_pk3d_model_forward_fitting
+    - parinfo_fluct (dict): see parinfo_fluct in get_pk3d_model_forward_fitting
     - model (class Model object): the model to be updated in the fit
-    - parinfo_noise (dictionary): same as parinfo_pk3d with accepted parameter 'Noise'
+    - parinfo_noise (dictionary): same as parinfo_fluct with accepted parameter 'ampli'
 
     Outputs
     ----------
@@ -254,32 +256,32 @@ def lnlike_defpar_fluct(parinfo_pk3d,
     par_max = []
     
     #========== Deal with fluctuation parameters
-    Npar_fluct = len(list(parinfo_pk3d.keys()))
+    Npar_fluct = len(list(parinfo_fluct.keys()))
     for ipar in range(Npar_fluct):
         
-        parkey = list(parinfo_pk3d.keys())[ipar]
+        parkey = list(parinfo_fluct.keys())[ipar]
 
         #----- Check that the param is ok wrt the model
         try:
             bid = model.model_pressure_fluctuation[parkey]
         except:
             raise ValueError('The parameter '+parkey+' is not in self.model')    
-        if 'guess' not in parinfo_pk3d[parkey]:
+        if 'guess' not in parinfo_fluct[parkey]:
             raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
-        if 'unit' not in parinfo_pk3d[parkey]:
+        if 'unit' not in parinfo_fluct[parkey]:
             raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
 
         #----- Update the name list
         par_list.append(parkey)
 
         #----- Update the guess values
-        par0_value.append(parinfo_pk3d[parkey]['guess'][0])
-        par0_err.append(parinfo_pk3d[parkey]['guess'][1])
+        par0_value.append(parinfo_fluct[parkey]['guess'][0])
+        par0_err.append(parinfo_fluct[parkey]['guess'][1])
 
         #----- Update the limit values
-        if 'limit' in parinfo_pk3d[parkey]:
-            par_min.append(parinfo_pk3d[parkey]['limit'][0])
-            par_max.append(parinfo_pk3d[parkey]['limit'][1])
+        if 'limit' in parinfo_fluct[parkey]:
+            par_min.append(parinfo_fluct[parkey]['limit'][0])
+            par_max.append(parinfo_fluct[parkey]['limit'][1])
         else:
             par_min.append(-np.inf)
             par_max.append(+np.inf)
@@ -287,7 +289,7 @@ def lnlike_defpar_fluct(parinfo_pk3d,
     #========== Deal with noise normalization
     if parinfo_noise is not None:
         Npar_noise = len(list(parinfo_noise.keys()))
-        list_noise_allowed = ['noise']
+        list_noise_allowed = ['ampli']
         
         for ipar in range(Npar_noise):
 
@@ -295,7 +297,7 @@ def lnlike_defpar_fluct(parinfo_pk3d,
 
             #----- Check that the param is ok wrt the model
             if parkey not in list_noise_allowed:
-                raise ValueError('parinfo_noise allowed param is noise only')
+                raise ValueError('parinfo_noise allowed param is "ampli" only')
             if 'guess' not in parinfo_noise[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
             if 'unit' not in parinfo_noise[parkey]:
@@ -342,10 +344,10 @@ def lnlike_prior_profile(param,
     Parameters
     ----------
     - param (list): the parameter to apply to the model
-    - parinfo_profile (dict): see get_smooth_model_forward_fitting
-    - parinfo_center (dict): see get_smooth_model_forward_fitting
-    - parinfo_ellipticity (dict): see get_smooth_model_forward_fitting
-    - parinfo_ZL (dict): see get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see get_radial_model_forward_fitting
+    - parinfo_center (dict): see get_radial_model_forward_fitting
+    - parinfo_ellipticity (dict): see get_radial_model_forward_fitting
+    - parinfo_ZL (dict): see get_radial_model_forward_fitting
 
     Outputs
     ----------
@@ -459,7 +461,7 @@ def lnlike_prior_profile(param,
 #==================================================
 
 def lnlike_prior_fluct(param,
-                       parinfo_pk3d,
+                       parinfo_fluct,
                        parinfo_noise=None):
     """
     Compute the prior given the input parameter and some information
@@ -468,7 +470,7 @@ def lnlike_prior_fluct(param,
     Parameters
     ----------
     - param (list): the parameter to apply to the model
-    - parinfo_pk3d (dict): see get_pk3d_model_forward_fitting
+    - parinfo_fluct (dict): see get_pk3d_model_forward_fitting
     - parinfo_noise (dict): see get_pk3d_model_forward_fitting
 
     Outputs
@@ -481,22 +483,22 @@ def lnlike_prior_fluct(param,
     idx_par = 0
 
     #---------- Fluctuation parameters
-    parkeys_fluct = list(parinfo_pk3d.keys())
+    parkeys_fluct = list(parinfo_fluct.keys())
 
     for ipar in range(len(parkeys_fluct)):
         parkey = parkeys_fluct[ipar]
         
         # Flat prior
-        if 'limit' in parinfo_pk3d[parkey]:
-            if param[idx_par] < parinfo_pk3d[parkey]['limit'][0]:
+        if 'limit' in parinfo_fluct[parkey]:
+            if param[idx_par] < parinfo_fluct[parkey]['limit'][0]:
                 return -np.inf                
-            if param[idx_par] > parinfo_pk3d[parkey]['limit'][1]:
+            if param[idx_par] > parinfo_fluct[parkey]['limit'][1]:
                 return -np.inf
             
         # Gaussian prior
-        if 'prior' in parinfo_pk3d[parkey]:
-            expected = parinfo_pk3d[parkey]['prior'][0]
-            sigma = parinfo_pk3d[parkey]['prior'][1]
+        if 'prior' in parinfo_fluct[parkey]:
+            expected = parinfo_fluct[parkey]['prior'][0]
+            sigma = parinfo_fluct[parkey]['prior'][1]
             prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
 
         # Increase param index
@@ -549,10 +551,10 @@ def lnlike_setpar_profile(param,
     ----------
     - param (list): the parameter to apply to the model
     - model (pitszi object): pitszi object from class Model
-    - parinfo_profile (dict): see get_smooth_model_forward_fitting
-    - parinfo_center (dict): see get_smooth_model_forward_fitting
-    - parinfo_ellipticity (dict): see get_smooth_model_forward_fitting
-    - parinfo_ZL (dict): see get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see get_radial_model_forward_fitting
+    - parinfo_center (dict): see get_radial_model_forward_fitting
+    - parinfo_ellipticity (dict): see get_radial_model_forward_fitting
+    - parinfo_ZL (dict): see get_radial_model_forward_fitting
 
     Outputs
     ----------
@@ -628,7 +630,7 @@ def lnlike_setpar_profile(param,
     
 def lnlike_setpar_fluct(param,
                         model,
-                        parinfo_pk3d,
+                        parinfo_fluct,
                         parinfo_noise=None):
     """
     Set the model to the given fluctuation parameters
@@ -637,7 +639,7 @@ def lnlike_setpar_fluct(param,
     ----------
     - param (list): the parameters to apply to the model
     - model (pitszi object): pitszi object from class Model
-    - parinfo_pk3d (dict): see get_pk3d_model_forward_fitting
+    - parinfo_fluct (dict): see get_pk3d_model_forward_fitting
     - parinfo_noise (dict): see get_pk3d_model_forward_fitting
 
     Outputs
@@ -650,11 +652,11 @@ def lnlike_setpar_fluct(param,
     idx_par = 0
 
     #---------- Fluctuation parameters
-    parkeys_fluct = list(parinfo_pk3d.keys())
+    parkeys_fluct = list(parinfo_fluct.keys())
     for ipar in range(len(parkeys_fluct)):
         parkey = parkeys_fluct[ipar]
-        if parinfo_pk3d[parkey]['unit'] is not None:
-            unit = parinfo_pk3d[parkey]['unit']
+        if parinfo_fluct[parkey]['unit'] is not None:
+            unit = parinfo_fluct[parkey]['unit']
         else:
             unit = 1
         model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
@@ -695,7 +697,7 @@ def lnlike_profile(param,
     Parameters
     ----------
     - param (np array): the value of the test parameters
-    - parinfo_profile (dict): see parinfo_profile in get_smooth_model_forward_fitting
+    - parinfo_profile (dict): see parinfo_profile in get_radial_model_forward_fitting
     - model (class Model object): the model to be updated
     - data_img (nd array): the image data
     - data_noiseprop (nd_array): the inverse covariance matrix to be used for the fit or the rms,
@@ -703,9 +705,9 @@ def lnlike_profile(param,
     - data_mask (nd array): the image mask
     - data_psf (quantity): input to model_mock.get_sz_map
     - data_tf (dict): input to model_mock.get_sz_map
-    - parinfo_center (dict): see parinfo_center in get_smooth_model_forward_fitting
-    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_smooth_model_forward_fitting
-    - parinfo_ZL (dict): see parinfo_ZL in get_smooth_model_forward_fitting
+    - parinfo_center (dict): see parinfo_center in get_radial_model_forward_fitting
+    - parinfo_ellipticity (dict): see parinfo_ellipticity in get_radial_model_forward_fitting
+    - parinfo_ZL (dict): see parinfo_ZL in get_radial_model_forward_fitting
     - use_covmat (bool): if True, assumes that data_noiseprop is the inverse noise covariance matrix
 
     Outputs
@@ -752,7 +754,7 @@ def lnlike_profile(param,
 # Must be global and here to avoid pickling errors
 global lnlike_fluct
 def lnlike_fluct(param,
-                 parinfo_pk3d,
+                 parinfo_fluct,
                  method_fluctuation_image,
                  model,
                  model_ymap_sph,
@@ -774,7 +776,7 @@ def lnlike_fluct(param,
     Parameters
     ----------
     - param (np array): the value of the test parameters
-    - parinfo_pk3d (dict): see parinfo_pk3d in get_pk3d_model_forward_fitting
+    - parinfo_fluct (dict): see parinfo_fluct in get_pk3d_model_forward_fitting
     - method_fluctuation_image (str): the method used to compute the fluctuation image (ratio, subtract)
     - model (class Model object): the model to be updated
     - model_ymap_sph (2d array): best-fit smooth model
@@ -798,11 +800,11 @@ def lnlike_fluct(param,
     """
 
     #========== Deal with flat and Gaussian priors
-    prior = lnlike_prior_fluct(param, parinfo_pk3d,parinfo_noise=parinfo_noise)
+    prior = lnlike_prior_fluct(param, parinfo_fluct,parinfo_noise=parinfo_noise)
     if not np.isfinite(prior): return -np.inf
     
     #========== Change model parameters
-    model, noise_ampli = lnlike_setpar_fluct(param, model, parinfo_pk3d,
+    model, noise_ampli = lnlike_setpar_fluct(param, model, parinfo_fluct,
                                              parinfo_noise=parinfo_noise)
     
     #========== Get the model
@@ -839,7 +841,7 @@ def lnlike_fluct(param,
         return -np.inf
     else:
         return lnL
-
+    
 
 #==================================================
 # Mock class
@@ -872,41 +874,76 @@ class Inference():
     def __init__(self,
                  data,
                  model,
-    ):
+                 silent=False,
+                 output_dir='./pitszi_output',
+                 method_pk2d_extraction='naive',
+                 method_fluctuation_image='ratio',
+                 method_noise_covmat='model',
+                 kbin_min=0*u.arcsec**-1,
+                 kbin_max=0.1*u.arcsec**-1,
+                 kbin_Nbin=20,
+                 kbin_scale='lin',
+                 mcmc_nwalkers=100,
+                 mcmc_nsteps=500,
+                 mcmc_burnin=100,
+                 mcmc_reset=False,
+                 mcmc_run=True,
+                 mcmc_Nresamp=100):
         """
-        Initialize the inference object.
+        Initialize the inference object. 
+        All parameters can be changed on the fly.
         
         Parameters
         ----------
         - data (pitszi Class Data object): the data
         - model (pitszi Class Model object): the model
-        
+        - silent (bool): set to False for printing information
+        - output_dir (str): directory where outputs are saved
+        - method_pk2d_extraction (str): Pk2d extraction method 
+        (implemented: 'naive' or 'arevalo12')
+        - method_fluctuation_image (str): fluctuation calculation method 
+        (implemented: 'ratio' or 'subtract')
+        - method_noise_covmat (str): method to compute noise MC realization 
+        (implemented: 'model' or 'covariance')
+        - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to angle)
+        - kbin_max (quantity): maximal k value for the 2D power spectrum (homogeneous to angle)
+        - kbin_Nbin (int): number of bins in the 2d power spectrum
+        - kbin_scale (str): bin spacing ('lin' or 'log')
+        - mcmc_nwalkers (int): number of MCMC walkers
+        - mcmc_nsteps (int): number of MCMC steps to run
+        - mcmc_burnin (int): the burnin, number of point to remove from the chains
+        - mcmc_reset (bool): True for restarting the MCMC even if a sampler exists
+        - mcmc_run (bool): True to run the MCMC
+        - mcmc_Nresamp (int): the number of Monte Carlo to resample the chains for results
+
         """
 
         # Admin
-        self.silent     = False
-        self.output_dir = './pitszi_output'
+        self.silent     = silent
+        self.output_dir = output_dir
 
         # Input data and model (deepcopy to avoid modifying the input when fitting)
         self.data  = copy.deepcopy(data)
-        self.model = copy.deepcopy(model) 
+        self.model = copy.deepcopy(model)
 
         # Analysis methodology
-        self.method_pk2d_extraction = 'naive'   # [naive, arevalo12]
-        self.method_fluctuation_image = 'ratio' # [ratio, difference]
+        self.method_pk2d_extraction   = method_pk2d_extraction   # [naive, arevalo12]
+        self.method_fluctuation_image = method_fluctuation_image # [ratio, difference]
+        self.method_noise_covmat      = method_noise_covmat      # [covariance, model]
 
         # Binning in k
-        self.kbin_min   = 0 * u.arcsec**-1
-        self.kbin_max   = 1/10.0*u.arcsec**-1
-        self.kbin_Nbin  = 20
-        self.kbin_scale = 'lin' # ['lin', 'log']
+        self.kbin_min   = kbin_min
+        self.kbin_max   = kbin_max
+        self.kbin_Nbin  = kbin_Nbin
+        self.kbin_scale = kbin_scale # ['lin', 'log']
 
         # MCMC parameters
-        self.mcmc_nwalkers = 100
-        self.mcmc_nsteps   = 500
-        self.mcmc_burnin   = 100
-        self.mcmc_reset    = False
-        self.mcmc_run      = True
+        self.mcmc_nwalkers = mcmc_nwalkers
+        self.mcmc_nsteps   = mcmc_nsteps
+        self.mcmc_burnin   = mcmc_burnin
+        self.mcmc_reset    = mcmc_reset
+        self.mcmc_run      = mcmc_run
+        self.mcmc_Nresamp  = mcmc_Nresamp
 
         
     #==================================================
@@ -940,57 +977,57 @@ class Inference():
 
 
     #==================================================
-    # Compute noise properties
+    # Compute noise statistics
     #==================================================
     
-    def get_pk2d_noise_properties(self,
+    def get_pk2d_noise_statistics(self,
                                   kbin_edges=None,
-                                  Nmc=1000,
-                                  method_mc='model'):
+                                  Nmc=1000):
         """
         This function compute the noise properties associated
         with the data noise
         
         Parameters
         ----------
-        - kbin_edges (1d array): array of k edges that can be used instead of default one
+        - kbin_edges (1d array, quantity): array of k edges that can be used instead of default one
         - Nmc (int): number of monte carlo realization
-        - method_mc (str): the method to compute MC realization (model or covariance)
 
         Outputs
         ----------
-        - noise_pk2d_ref (): the noise mean
-        - noise_pk2d_rms (): the noise rms
-        - noise_pk2d_covmat (): the noise covariance matrix
+        - noise_pk2d_ref (1d array): the noise mean
+        - noise_pk2d_covmat (2d array): the noise covariance matrix
 
         """
         
-        # Info to user
+        #----- Info to user
         if not self.silent:
             print('----- Computing Pk2d noise covariance -----')
         
-        # Useful info
+        #----- Useful info
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges
+            kedges = kbin_edges.to_value('arcsec-1')
+            
         reso = self.model.get_map_reso().to_value('arcsec')
 
         model_ymap_sph_deconv = self.model.get_sz_map(no_fluctuations=True,
-                                                      irfs_convolution_beam=self.data.psf_fwhm)    
-        model_ymap_sph        = self.model.get_sz_map(no_fluctuations=True,
-                                                      irfs_convolution_beam=self.data.psf_fwhm,
-                                                      irfs_convolution_TF=self.data.transfer_function) 
+                                                      irfs_convolution_beam=self.data.psf_fwhm)
         
-        # Extract noise MC realization
-        if method_mc == 'model':
+        #----- Extract noise MC realization
+        if self.method_noise_covmat == 'model':
             noise_ymap_mc = self.data.get_noise_monte_carlo_from_model(center=None, seed=None, Nmc=Nmc)
-        elif kind_mc == 'covariance':
+            if noise_ymap_mc is None:
+                raise ValueError("Noise MC could not be computed using method_noise_covmat='model'")
+
+        elif self.method_noise_covmat == 'covariance':
             noise_ymap_mc = self.data.get_noise_monte_carlo_from_covariance(seed=None, Nmc=Nmc)
+            if noise_ymap_mc is None:
+                raise ValueError("Noise MC could not be computed using method_noise_covmat='covariance'")
         else:
-            raise ValueError("The noise MC can only be computed using kind_mc = 'model' or kind_mc = 'covariance'")
+            raise ValueError("Noise MC can only be computed using method_noise_covmat='model'/'covariance'")
                         
-        # Compute Pk2d MC realization
+        #----- Compute Pk2d MC realization
         noise_pk2d_mc = np.zeros((Nmc, len(kedges)-1))
         for imc in range(Nmc):
             
@@ -1006,27 +1043,28 @@ class Inference():
         noise_pk2d_mean = np.mean(noise_pk2d_mc, axis=0)
         noise_pk2d_rms  = np.std(noise_pk2d_mc, axis=0)
 
-        # Compute covariance
+        #----- Compute covariance
         noise_pk2d_covmat = np.zeros((len(kedges)-1, len(kedges)-1))
         for imc in range(Nmc):
             noise_pk2d_covmat += np.matmul((noise_pk2d_mc[imc,:]-noise_pk2d_mean)[:,None],
                                            (noise_pk2d_mc[imc,:]-noise_pk2d_mean)[None,:])
         noise_pk2d_covmat /= Nmc
 
-        # Sanity check
+        #----- Sanity check
         if np.sum(np.isnan(noise_pk2d_covmat)) > 0:
             if not self.silent:
-                print('The number of bins is such that some bins are empty, leading to nan in the data.')
-            raise ValueError('Issue with binning')
+                print('Some pixels in the covariance matrix are NaN.')
+                print('This cna be that the number of bins is such that some bins are empty.')
+            raise ValueError('Issue with noise covariance matrix')
 
-        return noise_pk2d_mean, noise_pk2d_rms, noise_pk2d_covmat
+        return noise_pk2d_mean, noise_pk2d_covmat
 
 
     #==================================================
-    # Compute model variance properties
+    # Compute model variance statistics
     #==================================================
     
-    def get_pk2d_modelvar_properties(self,
+    def get_pk2d_modelvar_statistics(self,
                                      kbin_edges=None,
                                      Nmc=1000):
         """
@@ -1035,26 +1073,26 @@ class Inference():
         
         Parameters
         ----------
-        - kbin_edges (1d array): array of k edges that can be used instead of default one
+        - kbin_edges (1d array quantity): array of k edges that can be used instead of default one
         - Nmc (int): number of monte carlo realization
 
         Outputs
         ----------
-        - model_pk2d_ref (): the model mean
-        - model_pk2d_rms (): the model rms
-        - model_pk2d_covmat (): the model covariance matrix
+        - model_pk2d_ref (1d array): the model mean
+        - model_pk2d_covmat (2d array): the model covariance matrix
 
         """
 
-        # Info to user
+        #----- Info to user
         if not self.silent:
             print('----- Computing Pk2d model covariance -----')
         
-        # Useful info
+        #----- Useful info
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges
+            kedges = kbin_edges.to_value('arcsec-1')
+            
         reso = self.model.get_map_reso().to_value('arcsec')
 
         model_ymap_sph_deconv = self.model.get_sz_map(no_fluctuations=True,
@@ -1063,7 +1101,7 @@ class Inference():
                                                       irfs_convolution_beam=self.data.psf_fwhm,
                                                       irfs_convolution_TF=self.data.transfer_function) 
 
-        # Compute Pk2d MC realization
+        #----- Compute Pk2d MC realization
         model_pk2d_mc     = np.zeros((Nmc, len(kedges)-1))
         model_pk2d_covmat = np.zeros((len(kedges)-1, len(kedges)-1))
         
@@ -1086,19 +1124,20 @@ class Inference():
         model_pk2d_mean = np.mean(model_pk2d_mc, axis=0)
         model_pk2d_rms = np.std(model_pk2d_mc, axis=0)
 
-        # Compute covariance
+        #----- Compute covariance
         for imc in range(Nmc):
             model_pk2d_covmat += np.matmul((model_pk2d_mc[imc,:]-model_pk2d_mean)[:,None],
                                            (model_pk2d_mc[imc,:]-model_pk2d_mean)[None,:])
         model_pk2d_covmat /= Nmc
 
-        # Sanity check
+        #----- Sanity check
         if np.sum(np.isnan(model_pk2d_covmat)) > 0:
             if not self.silent:
-                print('The number of bins is such that some bins are empty, leading to nan in the data.')
-            raise ValueError('Issue with binning')
+                print('Some pixels in the covariance matrix are NaN.')
+                print('This cna be that the number of bins is such that some bins are empty.')
+            raise ValueError('Issue with noise covariance matrix')
 
-        return model_pk2d_mean, model_pk2d_rms, model_pk2d_covmat
+        return model_pk2d_mean, model_pk2d_covmat
     
     
     #==================================================
@@ -1134,7 +1173,7 @@ class Inference():
         #---------- Check the truth
         if truth is not None:
             if len(truth) != Nparam:
-                raise ValueError("The 'truth' parameter should match the number of parameters")
+                raise ValueError("The 'truth' keyword should match the number of parameters")
 
         #---------- Remove the burnin
         if self.mcmc_burnin <= Nsample:
@@ -1156,7 +1195,7 @@ class Inference():
         plotlib.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
         
         # Produce 1D histogram of the chains
-        namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_1d_hist_'+i+'.pdf' for i in parlist]
+        namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_hist_'+i+'.pdf' for i in parlist]
         plotlib.chains_1Dhist(par_chains, parlist, namefiles,
                               conf=conf, truth=truth)
 
@@ -1176,26 +1215,26 @@ class Inference():
     # Compute the smooth model via forward fitting
     #==================================================
     
-    def get_smooth_model_forward_fitting(self,
+    def get_radial_model_forward_fitting(self,
                                          parinfo_profile,
                                          parinfo_center=None,
                                          parinfo_ellipticity=None,
                                          parinfo_ZL=None,
                                          use_covmat=False,
-                                         set_best_fit=True,
                                          show_fit_result=False):
         """
-        This function fits the data with a defined model
+        This function fits the data given the current model and the parameter information
+        given by the user.
         
         Parameters
         ----------
         - parinfo_profile (dictionary): the model parameters associated with 
         self.model.model_pressure_profile to be fit as, e.g., 
-        parinfo_prof = {'P_0':                    # --> Parameter key (mandatory)
-                       {'guess':[0.01, 0.001],   # --> initial guess: center, uncertainty (mandatory)
-                        'unit': u.keV*u.cm**-3,  # --> unit (mandatory, None if unitless)
-                        'limit':[0, np.inf],     # --> Allowed range, i.e. flat prior (optional)
-                        'prior':[0.01, 0.001],   # --> Gaussian prior: mean, sigma (optional)
+        parinfo_prof = {'P_0':                   # --> Parameter key (mandatory)
+                        {'guess':[0.01, 0.001],  # --> initial guess: center, uncertainty (mandatory)
+                         'unit': u.keV*u.cm**-3, # --> unit (mandatory, None if unitless)
+                         'limit':[0, np.inf],    # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[0.01, 0.001],  # --> Gaussian prior: mean, sigma (optional)
                         },
                         'r_p':
                         {'limit':[0, np.inf], 
@@ -1207,16 +1246,15 @@ class Inference():
         'RA' and 'Dec'
         - parinfo_ellipticity (dictionary): same as parinfo_profile with accepted parameters
         'min_to_maj_axis_ratio' and 'angle'
-        - parinfo_ZL (dictionary): same as parinfo_profile with accepted parameter
-        'ZL'
-        - use_covmat (bool): if True, the inverse noise covariance matrix is used instead 
+        - parinfo_ZL (dictionary): same as parinfo_profile with accepted parameter 'ZL'
+        - use_covmat (bool): if True, the noise covariance matrix is used instead 
         of the noise rms
-        - set_best_fit (bool): set the best fit model to the best fit parameters
         - show_fit_result (bool): show the best fit model and residual. If true, set_best_fit
         will automatically be true
 
         Outputs
         ----------
+        - parlist (list): the list of the fit parameters
         - sampler (emcee object): the sampler associated with model parameters of
         the smooth component
 
@@ -1290,95 +1328,189 @@ class Inference():
         else:
             if not self.silent: print('      - Not running, but restoring the existing sampler')
 
-        #========== Set the best-fit model
-        if set_best_fit or show_fit_result:
-            best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
-            best_model, best_ZL = lnlike_setpar_profile(best_par, self.model,
-                                                        parinfo_profile,
-                                                        parinfo_center=parinfo_center,
-                                                        parinfo_ellipticity=parinfo_ellipticity,
-                                                        parinfo_ZL=parinfo_ZL)
-        
-        #========== Show best-fit
-        if show_fit_result:
+        #========== Show results
+        if show_fit_result: self.get_radial_model_forward_fitting_results(sampler,
+                                                                          parinfo_profile,
+                                                                          parinfo_center=parinfo_center,
+                                                                          parinfo_ellipticity=parinfo_ellipticity,
+                                                                          parinfo_ZL=parinfo_ZL)
             
-            # Get noise MC 
-            if self.data.noise_covmat is not None:
-                noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=1000)
-            elif (self.data.noise_model_pk_center is not None) and (self.data.noise_model_radial is not None):
-                noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=1000)
-            else:
-                raise ValueError('Noise MC could not be computed when showing results')
-
-            # Compute best fit map
-            best_ymap_sph = best_ZL + best_model.get_sz_map(no_fluctuations=True,
-                                                            irfs_convolution_beam=self.data.psf_fwhm,
-                                                            irfs_convolution_TF=self.data.transfer_function)
-
-            # MC resampling
-            MC_ymap_sph = np.zeros((100, best_ymap_sph.shape[0], best_ymap_sph.shape[1]))
-            MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=100)
-            for i in range(100):
-                mc_model, mc_ZL = lnlike_setpar_profile(MC_pars[i,:], self.model, parinfo_profile,
-                                                        parinfo_center=parinfo_center,
-                                                        parinfo_ellipticity=parinfo_ellipticity,
-                                                        parinfo_ZL=parinfo_ZL)
-                MC_ymap_sph[i,:,:] = mc_ZL + mc_model.get_sz_map(no_fluctuations=True,
-                                                                 irfs_convolution_beam=self.data.psf_fwhm,
-                                                                 irfs_convolution_TF=self.data.transfer_function)
-                                   
-            # plots profile
-            plotlib.show_best_fit_radial_profile(self.output_dir+'/MCMC_radial_best_profile.pdf',
-                                                 self.data.image,
-                                                 self.data.header,
-                                                 noise_mc,
-                                                 self.model,
-                                                 best_ymap_sph,
-                                                 MC_ymap_sph,
-                                                 mask=self.data.mask,
-                                                 binsize=5)
-            
-            # plots map
-            plotlib.show_best_fit_radial_map(self.output_dir+'/MCMC_radial_best_map.pdf',
-                                             self.data.image,
-                                             self.data.header,
-                                             noise_mc,
-                                             best_ymap_sph,
-                                             mask=self.data.mask,
-                                             visu_smooth=10)
-
-            # Make sure the model is the best
-            self.model = best_model
-            
+        #========== Compute the best-fit model and set it
+        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        self.model, best_ZL = lnlike_setpar_profile(best_par, self.model,
+                                                    parinfo_profile,
+                                                    parinfo_center=parinfo_center,
+                                                    parinfo_ellipticity=parinfo_ellipticity,
+                                                    parinfo_ZL=parinfo_ZL)
+                    
         return par_list, sampler
+
+
+    #==================================================
+    # Show the fit results related to profile
+    #==================================================
+    
+    def get_radial_model_forward_fitting_results(self,
+                                                 sampler,
+                                                 parinfo_profile,
+                                                 parinfo_center=None,
+                                                 parinfo_ellipticity=None,
+                                                 parinfo_ZL=None,
+                                                 visu_smooth=10*u.arcsec,
+                                                 binsize_prof=5*u.arcsec,
+                                                 Nmc=1000,
+                                                 true_pressure_profile=None,
+                                                 true_compton_profile=None):
+        """
+        This is function is used to show the results of the MCMC
+        regarding the radial profile
+            
+        Parameters
+        ----------
+        - sampler (emcee object): the sampler obtained from get_radial_model_forward_fitting
+        - parinfo_profile (dict): same as get_radial_model_forward_fitting
+        - parinfo_center (dict): same as get_radial_model_forward_fitting
+        - parinfo_ellipticity (dict): same as get_radial_model_forward_fitting
+        - parinfo_ZL (dict): same as get_radial_model_forward_fitting
+        - visu_smooth (quantity): The extra smoothing FWHM for vidualization. Homogeneous to arcsec.
+        - binsize_prof (quantity): The binsize for the y profile. Homogeneous to arcsec
+        - Nmc (int): the number of Monte CArlo realization used to propagate data errors
+        - true_pressure_profile (dict): pass a dictionary containing the profile to compare with
+        in the form {'r':array in kpc, 'p':array in keV cm-3}
+        - true_y_profile (dict): pass a dictionary containing the profile to compare with
+        in the form {'r':array in arcmin, 'y':array in [y]}
+        
+        Outputs
+        ----------
+        plots are produced
+
+        """
+
+        #========== Get noise MC 
+        if self.method_noise_covmat == 'model':
+            noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=Nmc)
+        elif self.method_noise_covmat == 'covariance':
+            noise_mc = self.data.get_noise_monte_carlo_from_model(Nmc=Nmc)
+        else:
+            raise ValueError("Noise MC can only be computed using method_noise_covmat='model'/'covariance'")
+
+        #========== rms for profile
+        rms_prof = np.std(noise_mc, axis=0)
+        rms_prof = rms_prof/self.data.mask**2
+        rms_prof[~np.isfinite(rms_prof)] = np.nan
+        
+        #========== Get the best-fit
+        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_model, best_ZL = lnlike_setpar_profile(best_par, self.model,
+                                                    parinfo_profile,
+                                                    parinfo_center=parinfo_center,
+                                                    parinfo_ellipticity=parinfo_ellipticity,
+                                                    parinfo_ZL=parinfo_ZL)
+
+        #========== Get the profile for the data, centered on best-fit center if fitted
+        data_yprof_tmp = radial_profile_sb(self.data.image, 
+                                           (best_model.coord.icrs.ra.to_value('deg'),
+                                            best_model.coord.icrs.dec.to_value('deg')), 
+                                           stddev=rms_prof, header=self.data.header, 
+                                           binsize=binsize_prof.to_value('deg'))
+        r2d = data_yprof_tmp[0]*60
+        data_yprof = data_yprof_tmp[1]
+
+        mc_y_data = np.zeros((Nmc, len(r2d)))
+        for i in range(Nmc):
+            mc_y_data[i,:] = radial_profile_sb(noise_mc[i,:,:], 
+                                               (best_model.coord.icrs.ra.to_value('deg'),
+                                                best_model.coord.icrs.dec.to_value('deg')), 
+                                               stddev=rms_prof, header=self.data.header, 
+                                               binsize=binsize_prof.to_value('deg'))[1]
+        data_yprof_err = np.std(mc_y_data, axis=0)
+
+        #========== Compute best fit observables
+        best_ymap_sph = best_ZL + best_model.get_sz_map(no_fluctuations=True,
+                                                        irfs_convolution_beam=self.data.psf_fwhm,
+                                                        irfs_convolution_TF=self.data.transfer_function)
+
+        best_y_profile = radial_profile_sb(best_ymap_sph, 
+                                           (best_model.coord.icrs.ra.to_value('deg'),
+                                            best_model.coord.icrs.dec.to_value('deg')), 
+                                           stddev=best_ymap_sph*0+1, header=self.data.header, 
+                                           binsize=binsize_prof.to_value('deg'))[1]
+
+        
+        r3d, best_pressure_profile = best_model.get_pressure_profile()
+        r3d = r3d.to_value('kpc')
+        best_pressure_profile = best_pressure_profile.to_value('keV cm-3')
+        
+        #========== MC resampling
+        MC_ymap_sph         = np.zeros((self.mcmc_Nresamp, best_ymap_sph.shape[0], best_ymap_sph.shape[1]))
+        MC_y_profile        = np.zeros((self.mcmc_Nresamp, len(r2d)))
+        MC_pressure_profile = np.zeros((self.mcmc_Nresamp, len(r3d)))
+        
+        MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
+        for i in range(self.mcmc_Nresamp):
+            # Get MC model
+            mc_model, mc_ZL = lnlike_setpar_profile(MC_pars[i,:], self.model, parinfo_profile,
+                                                    parinfo_center=parinfo_center,
+                                                    parinfo_ellipticity=parinfo_ellipticity,
+                                                    parinfo_ZL=parinfo_ZL)
+            # Get MC ymap
+            MC_ymap_sph[i,:,:] = mc_ZL + mc_model.get_sz_map(no_fluctuations=True,
+                                                             irfs_convolution_beam=self.data.psf_fwhm,
+                                                             irfs_convolution_TF=self.data.transfer_function)
+            # Get MC y profile
+            MC_y_profile[i,:] = radial_profile_sb(MC_ymap_sph[i,:,:], 
+                                                  (best_model.coord.icrs.ra.to_value('deg'),
+                                                   best_model.coord.icrs.dec.to_value('deg')), 
+                                                  stddev=best_ymap_sph*0+1, header=self.data.header, 
+                                                  binsize=binsize_prof.to_value('deg'))[1]
+            # Get MC pressure profile
+            MC_pressure_profile[i,:] = mc_model.get_pressure_profile()[1].to_value('keV cm-3')
+
+        #========== plots map
+        plotlib.show_fit_result_ymap(self.output_dir+'/MCMC_radial_results_y_map.pdf',
+                                     self.data.image,
+                                     self.data.header,
+                                     noise_mc,
+                                     best_ymap_sph,
+                                     mask=self.data.mask,
+                                     visu_smooth=visu_smooth.to_value('arcsec'))
+        
+        #========== plots ymap profile
+        plotlib.show_fit_ycompton_profile(self.output_dir+'/MCMC_radial_results_y_profile.pdf',
+                                          r2d, data_yprof, data_yprof_err,
+                                          best_y_profile, MC_y_profile,
+                                          true_compton_profile=true_compton_profile)
+        
+        #========== plots pressure profile
+        plotlib.show_fit_result_pressure_profile(self.output_dir+'/MCMC_radial_results_P_profile.pdf',
+                                                 r3d, best_pressure_profile, MC_pressure_profile,
+                                                 true_pressure_profile=true_pressure_profile)
     
     
     #==================================================
     # Compute the Pk contraint via forward fitting
     #==================================================
     
-    def get_pk3d_model_forward_fitting(self,
-                                       parinfo_pk3d,
-                                       parinfo_noise=None,
-                                       Nmc_noise=1000,
-                                       method_mc='model',
-                                       kbin_edges=None,
-                                       use_covmat=False,
-                                       set_best_fit=True,
-                                       show_fit_result=False):
+    def get_fluct_model_forward_fitting(self,
+                                        parinfo_fluct,
+                                        parinfo_noise=None,
+                                        Nmc_noise=1000,
+                                        kbin_edges=None,
+                                        use_covmat=False,
+                                        show_fit_result=False):
         """
         This function brute force fits the 3d power spectrum
         using a forward modeling approach
         
         Parameters
         ----------
-        - parinfo_pk (dictionary): the model parameters associated with 
+        - parinfo_fluct (dictionary): the model parameters associated with 
         self.model.model_pressure_fluctuation to be fit as, e.g., 
-        parinfo_pk = {'Norm':                     # --> Parameter key (mandatory)
-                       {'guess':[0.5, 0.3],      # --> initial guess: center, uncertainty (mandatory)
-                        'unit': None,            # --> unit (mandatory, None if unitless)
-                        'limit':[0, np.inf],     # --> Allowed range, i.e. flat prior (optional)
-                        'prior':[0.5, 0.1],      # --> Gaussian prior: mean, sigma (optional)
+        parinfo_fluct = {'Norm':                     # --> Parameter key (mandatory)
+                        {'guess':[0.5, 0.3],        # --> initial guess: center, uncertainty (mandatory)
+                         'unit': None,              # --> unit (mandatory, None if unitless)
+                         'limit':[0, np.inf],       # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[0.5, 0.1],        # --> Gaussian prior: mean, sigma (optional)
                         },
                         'slope':
                         {'limit':[-11/3-1, -11/3+1], 
@@ -1388,10 +1520,16 @@ class Inference():
                         {'limit':[0, 10], 
                           'unit': u.Mpc, 
                         },
-                       }    
+                       }  
+        - parinfo_noise (dictionary): same as parinfo_fluct but for the noise, i.e. parameter 'ampli'
+        - kbin_edges (1d array, quantity): array of k edges that can be used instead of default one, for 
+        very specific bining
+        - use_covmat (bool): set to true to use the covariance matrix or false for the rms only
+        - show_fit_result (bool): set to true to produce plots for fitting results
         
         Outputs
         ----------
+        - parlist (list): the list of the fit parameters
         - sampler (emcee object): the sampler associated with model parameters of
         the smooth component
 
@@ -1403,7 +1541,7 @@ class Inference():
             
         #========== Defines the fit parameters
         # Fit parameter list and information
-        par_list, par0_value, par0_err, par_min, par_max = lnlike_defpar_fluct(parinfo_pk3d, self.model,
+        par_list, par0_value, par0_err, par_min, par_max = lnlike_defpar_fluct(parinfo_fluct, self.model,
                                                                                parinfo_noise=parinfo_noise)
         ndim = len(par0_value)
         
@@ -1445,14 +1583,14 @@ class Inference():
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges
+            kedges = kbin_edges.to_value('arcsec-1')
+            
         reso = self.model.get_map_reso().to_value('arcsec')
         k2d, data_pk2d = utils.get_pk2d(data_image, reso, kedges=kedges)
         
         #========== Deal with how the noise should be accounted for
-        noise_pk2d_ref, noise_pk2d_rms, noise_pk2d_covmat = self.get_pk2d_noise_properties(kedges, Nmc_noise,
-                                                                                           method_mc=method_mc)
-        model_pk2d_ref, model_pk2d_rms, model_pk2d_covmat = self.get_pk2d_modelvar_properties(kedges, Nmc_noise)
+        noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc_noise)
+        model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc_noise)
         
         #========== Define the MCMC setup
         backend = utils.define_emcee_backend(sampler_file, sampler_exist,
@@ -1460,7 +1598,7 @@ class Inference():
         moves = emcee.moves.KDEMove()
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_fluct,
-                                        args=[parinfo_pk3d,
+                                        args=[parinfo_fluct,
                                               self.method_fluctuation_image,
                                               self.model,
                                               model_ymap_sph,
@@ -1487,35 +1625,137 @@ class Inference():
             res = sampler.run_mcmc(pos, self.mcmc_nsteps, progress=True, store=True)
         else:
             if not self.silent: print('      - Not running, but restoring the existing sampler')
-
+        
         #========== Set the best-fit model
-        if set_best_fit:
-            best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
-            best_model, best_noise = lnlike_setpar_fluct(best_par, self.model,
-                                                         parinfo_pk3d,
-                                                         parinfo_noise=parinfo_noise)
-            
-        #========== Set the best-fit model
-        if show_fit_result:
-            
-            k3d, pk3d_best = best_model.get_pressure_fluctuation_spectrum()
-
-            MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=100)
-            pk3d_mc = np.zeros((100, len(k3d)))
-            for imc in range(100):
-                mc_model, mc_Anoise = lnlike_setpar_fluct(MC_pars[imc,:], self.model, parinfo_pk3d,
-                                                          parinfo_noise=parinfo_noise)                
-                pk3d_mc[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1]
-
-            # Plot the Pk3d constraint
-            plotlib.show_pk3d_contraint(self.output_dir+'/MCMC_fluctuation_constraint_pk3d.pdf',
-                                        k3d, pk3d_best, pk3d_mc)
-
-            # Plot the Pk2d constraint
-            #plotlib.show_pk2d_contraint()
-            
+        if show_fit_result: self.get_fluct_model_forward_fitting_results(sampler,
+                                                                         parinfo_fluct,
+                                                                         parinfo_noise=parinfo_noise)
+        
+        #========== Make sure the model is set to the best fit
+        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        self.model, best_noise = lnlike_setpar_fluct(best_par, self.model,
+                                                     parinfo_fluct,
+                                                     parinfo_noise=parinfo_noise)
+        
         return par_list, sampler
 
+
+    #==================================================
+    # Show the fit results related to fluctuation
+    #==================================================
+    
+    def get_fluct_model_forward_fitting_results(self,
+                                                sampler,
+                                                parinfo_fluct,
+                                                parinfo_noise=None,
+                                                kbin_edges=None,
+                                                Nmc=1000,
+                                                true_pk3d=None):
+        """
+        This is function is used to show the results of the MCMC
+        regarding the fluctuations
+            
+        Parameters
+        ----------
+        - sampler (emcee object): the sampler obtained from get_radial_model_forward_fitting
+
+        Outputs
+        ----------
+        plots are produced
+
+        """
+
+        #========== Recover data and error
+        #---------- Get the smooth model and the data image
+        model_ymap_sph_deconv = self.model.get_sz_map(no_fluctuations=True,
+                                                      irfs_convolution_beam=self.data.psf_fwhm)    
+        model_ymap_sph        = self.model.get_sz_map(no_fluctuations=True,
+                                                      irfs_convolution_beam=self.data.psf_fwhm,
+                                                      irfs_convolution_TF=self.data.transfer_function) 
+        if self.method_fluctuation_image == 'ratio':
+            data_image = (self.data.image - model_ymap_sph)/model_ymap_sph_deconv
+        elif self.method_fluctuation_image == 'subtract':
+            data_image = self.data.image - model_ymap_sph
+        else:
+            raise ValueError('inference.method_fluctuation_image can be either "ratio" or "difference"')
+        data_image *= self.data.mask
+
+        #---------- Pk for the data
+        if kbin_edges is None:
+            kedges = self.get_kedges().to_value('arcsec-1')
+        else:
+            kedges = kbin_edges.to_value('arcsec-1')
+            
+        reso = self.model.get_map_reso().to_value('arcsec')
+        k2d, data_pk2d = utils.get_pk2d(data_image, reso, kedges=kedges)
+
+        noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc)
+        model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc)
+                         
+        #========== Get the best-fit
+        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_model, best_Anoise = lnlike_setpar_fluct(best_par, self.model,
+                                                      parinfo_fluct,
+                                                      parinfo_noise=parinfo_noise)
+        
+        #========== Compute best fit observables
+        k3d, best_pk3d = best_model.get_pressure_fluctuation_spectrum()
+        k3d = k3d.to_value('kpc-1')
+        best_pk3d = best_pk3d.to_value('kpc3')
+        
+        #========== MC resampling
+        MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
+        MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        
+        MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
+        for imc in range(self.mcmc_Nresamp):
+            # Get MC model
+            mc_model, mc_Anoise = lnlike_setpar_fluct(MC_pars[imc,:], self.model, parinfo_fluct,
+                                                      parinfo_noise=parinfo_noise)
+
+            # Get MC noise
+            MC_pk2d_noise[imc,:] = mc_Anoise * noise_pk2d_ref
+            
+            # Get MC Pk2d
+            mc_ymap = mc_model.get_sz_map(seed=None, no_fluctuations=False,
+                                          irfs_convolution_beam=self.data.psf_fwhm,
+                                          irfs_convolution_TF=self.data.transfer_function)
+            if self.method_fluctuation_image == 'ratio':
+                mc_image = (mc_ymap - model_ymap_sph)/model_ymap_sph_deconv
+            elif self.method_fluctuation_image == 'subtract':
+                mc_image = mc_ymap - model_ymap_sph
+            mc_image *= self.data.mask            
+            MC_pk2d[imc,:] = utils.get_pk2d(mc_image,
+                                            self.model.get_map_reso().to_value('arcsec'),
+                                            kedges=kedges)[1]
+            
+            # Get MC Pk3d
+            MC_pk3d[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1].to_value('kpc3')
+        
+        #========== Plot the Pk3d constraint
+        plotlib.show_fit_result_pk3d(self.output_dir+'/MCMC_fluctuation_results_pk3d.pdf',
+                                    k3d, best_pk3d, MC_pk3d, true_pk3d=true_pk3d)
+
+        #========== Plot the Pk2d constraint
+        plotlib.show_fit_result_pk2d(self.output_dir+'/MCMC_fluctuation_results_pk2d.pdf',
+                                     k2d, data_pk2d,
+                                     model_pk2d_ref,
+                                     np.diag(model_pk2d_covmat)**0.5, np.diag(noise_pk2d_covmat)**0.5,
+                                     MC_pk2d, MC_pk2d_noise)
+
+
+
+
+
+    
+
+
+
+
+
+
+    
 
     #==================================================
     # Extract Pk 3D from deprojection
@@ -1574,8 +1814,7 @@ class Inference():
 
 
 
-
-    
+    '''
     #==================================================
     # Extract the 3D power spectrum
     #==================================================
@@ -1754,4 +1993,4 @@ class Inference():
             pk2d = deconv_pk_transfer_function(k2d, pk2d, DeconvTF['k'], DeconvTF['TF'])
 
         return k2d*u.kpc**-1, pk2d*u.kpc**2
-
+    '''
