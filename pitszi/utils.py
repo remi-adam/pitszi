@@ -214,49 +214,6 @@ def covariance_from_correlation(correlation_matrix, std):
 
 
 #==================================================
-# Define the maximum k for having isotropy in 3D
-#==================================================
-
-def kmax_isotropic(Nx, Ny, Nz, proj_reso, los_reso):
-    """
-    Compute the maximum value of k so that we have isotropic sampling.
-    I.e., all k values beyond min (kmax_x, kmax_y, kmax_z) are not 
-    isotropic.
-    
-    Parameters
-    ----------
-    - Nx, Ny, Nz (int): the number of pixel along x, y, z
-    - proj_reso (float, kpc): the resolution along the projected dirtection
-    - los_reso (float, kpc): the resolution along the line-of-sight direction
-    
-    Outputs
-    ----------
-    - kmax (float): the isotropic kmax in kpc^-1
-    """
-
-    # check if even or odd and get kmax along each dimension
-    if (Nx % 2) == 0:
-        kmax_x = 1/(2*proj_reso)
-    else:
-        kmax_x = (Nx-1)/(2*Nx*proj_reso)
-
-    if (Ny % 2) == 0: 
-        kmax_y = 1/(2*proj_reso)
-    else:
-        kmax_y = (Ny-1)/(2*Ny*proj_reso)
-
-    if (Nz % 2) == 0: 
-        kmax_z = 1/(2*los_reso)
-    else:
-        kmax_z = (Nz-1)/(2*Nz*los_reso)
-        
-    # Take the min of the kmax along each axis as kmax isotropic
-    kmax_iso = np.amin([kmax_x, kmax_y, kmax_z])
-        
-    return kmax_iso
-
-
-#==================================================
 # Power spectrum attenuation of a Gaussian function
 #==================================================
 
@@ -327,7 +284,7 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
         k2d_norm_flat = k2d_norm.flatten()
 
         # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-        itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=1)
+        itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=(0,1))
         filtering_flat = itpl(k2d_norm_flat)
         filtering = np.reshape(filtering_flat, k2d_norm.shape)
 
@@ -371,7 +328,7 @@ def deconv_transfer_function(image, reso, TF):
     k2d_norm_flat = k2d_norm.flatten()
 
     # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-    itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=1)
+    itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=(0,1))
     filtering_flat = itpl(k2d_norm_flat)
     filtering = np.reshape(filtering_flat, k2d_norm.shape)
     
@@ -411,10 +368,37 @@ def deconv_pk_beam(k, pk, beamFWHM):
 
     """
     
-    Beam_k = utils.gaussian_pk(k, beamFWHM)
+    Beam_k = gaussian_pk(k, beamFWHM)
     pk_deconv = pk/Beam_k**2
 
     return pk_deconv
+
+
+#==================================================
+# Beam Power spectrum convolution
+#==================================================
+
+def apply_pk_beam(k, pk, beamFWHM):
+    """
+    This function apply the power spectrum from beam 
+    attenuation.
+    
+    Parameters
+    ----------
+    - k (nd array): k array in inverse scale unit
+    - pk (nd array): power spectrum array
+    - beamFWHM (quantity): the beam FWHM homogeneous to the inverse of k
+
+    Outputs
+    ----------
+    - pk_conv (np array): the convolved pk
+
+    """
+    
+    Beam_k = gaussian_pk(k, beamFWHM)
+    pk_conv = pk*Beam_k**2
+
+    return pk_conv
 
 
 #==================================================
@@ -439,12 +423,42 @@ def deconv_pk_transfer_function(k, pk, TF_k, TF):
 
     """
 
-    itpl = interp1d(TF_k, TF, fill_value=1)
+    itpl = interp1d(TF_k, TF, bounds_error=False, fill_value=(0,1))
     TF_kpc = itpl(k)
     
     pk_deconv = pk/TF_kpc**2
     
     return pk_deconv
+
+
+#==================================================
+# Transfer function power spectrum convolution
+#==================================================
+
+def apply_pk_transfer_function(k, pk, TF_k, TF):
+    """
+    This function apply the power spectrum from transfer 
+    function attenuation.
+    
+    Parameters
+    ----------
+    - k (nd array): k array in the same unit as in the TF_k
+    - pk (nd array): power spectrum array
+    - TF_k (nd array): k associated with the transfer function (same unit as k)
+    - TF (nd array): filtering (same lenght as TF_k)
+
+    Outputs
+    ----------
+    - pk_conv (np array): the convolved pk
+
+    """
+
+    itpl = interp1d(TF_k, TF, bounds_error=False, fill_value=(0,1))
+    TF_kpc = itpl(k)
+    
+    pk_conv = pk*TF_kpc**2
+    
+    return pk_conv
 
 
 #==================================================

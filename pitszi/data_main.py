@@ -15,6 +15,7 @@ from astropy import constants as const
 from astropy.wcs import WCS
 import copy
 import pickle
+import pprint
 
 from minot.ClusterTools import map_tools
 from pitszi import utils
@@ -125,6 +126,39 @@ class Data():
         self.noise_covmat          = noise_covmat
         self.noise_model_pk_center = noise_model_pk_center # output in [y] x arcsec^2
         self.noise_model_radial    = noise_model_radial    # output unitless
+
+
+    #==================================================
+    # Print parameters
+    #==================================================
+    
+    def print_param(self):
+        """
+        Print the current parameters describing the data.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        The parameters are printed in the terminal
+        
+        """
+
+        print('=====================================================')
+        print('=============== Current Data() state ================')
+        print('=====================================================')
+        
+        pp = pprint.PrettyPrinter(indent=4)
+        
+        par = self.__dict__
+        keys = list(par.keys())
+        
+        for k in range(len(keys)):
+            print(('--- '+(keys[k])))
+            print(('    '+str(par[keys[k]])))
+            print(('    '+str(type(par[keys[k]]))+''))
+        print('=====================================================')
         
 
     #==================================================
@@ -225,6 +259,7 @@ class Data():
         noise = np.random.normal(0, 1, size=(Nmc, Nx, Ny))
         noise = np.fft.fftn(noise, axes=(1,2))
         noise = np.real(np.fft.ifftn(noise * amplitude, axes=(1,2)))
+
     
         # Account for a radial dependence
         ramap, decmap = map_tools.get_radec_map(header)

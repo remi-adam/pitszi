@@ -227,6 +227,54 @@ class ModelSampling(object):
 
 
     #==================================================
+    # Define the maximum k for having isotropy in 3D
+    #==================================================
+    
+    def get_kmax_isotropic(self, physical=True):
+        """
+        Compute the maximum value of k so that we have isotropic sampling.
+        I.e., all k values beyond min (kmax_x, kmax_y, kmax_z) are not 
+        isotropic.
+        
+        Parameters
+        ----------
+        - Physical (bool): set to true to have kpc units, otherwise it will be arcsec
+
+        Outputs
+        ----------
+        - kmax (float): the isotropic kmax in unit of kpc^-1
+        """
+
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
+        
+        # check if even or odd and get kmax along each dimension
+        if (Nx % 2) == 0:
+            kmax_x = 1/(2*proj_reso)
+        else:
+            kmax_x = (Nx-1)/(2*Nx*proj_reso)
+    
+        if (Ny % 2) == 0: 
+            kmax_y = 1/(2*proj_reso)
+        else:
+            kmax_y = (Ny-1)/(2*Ny*proj_reso)
+    
+        if (Nz % 2) == 0: 
+            kmax_z = 1/(2*los_reso)
+        else:
+            kmax_z = (Nz-1)/(2*Nz*los_reso)
+            
+        # Take the min of the kmax along each axis as kmax isotropic
+        kmax_iso = np.amin([kmax_x, kmax_y, kmax_z])
+
+        if physical:
+            kmax_iso = kmax_iso*u.kpc**-1
+        else:
+            kmax_iso = (kmax_iso*self._D_ang.to_value('kpc')*u.rad**-1).to_value('arcsec-1')
+            
+        return kmax_iso
+
+    
+    #==================================================
     # Give information relative to sampling
     #==================================================
     
@@ -280,6 +328,11 @@ class ModelSampling(object):
         print('   k min/max L.o.S. :        ',
               "{:^10.6f}".format(np.amin(k_z[k_z>0])),'/',
               "{:^10.6f}".format(np.amax(k_z)), ' 1/kpc')
+        kmax_iso = self.get_kmax_isotropic().to_value('kpc-1')
+        print('   k max Nyquist :           ',
+              "{:^10.6f}".format(conv*kmax_iso), ' 1/arcsec')
+        print('   k max Nyquist :           ',
+              "{:^10.6f}".format(kmax_iso), ' 1/kpc')
         print('=====================================================')
 
 

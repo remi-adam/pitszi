@@ -768,8 +768,8 @@ def show_fit_result_pk3d(figfile,
                  label='True $P_k$', color='orange')
     plt.xlabel(r'$k$ (kpc$^{-1}$)')
     plt.ylabel(r'$\sqrt{4 \pi k^3 P(k)}$')
-    plt.ylim(np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_best))*1e-3,
-             np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_best))*5)
+    plt.ylim(np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc[1,:]))*1e-3,
+             np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc[1,:]))*5)
     plt.xlim(np.amin(k3d), np.amax(k3d))
     plt.legend(fontsize=12)
     plt.savefig(figfile)

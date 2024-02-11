@@ -17,6 +17,7 @@ from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
 from minot.ClusterTools import cluster_global
+import pprint
 
 from pitszi                  import title
 from pitszi.model_library    import ModelLibrary
@@ -177,6 +178,39 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         self._map_header = None
         self._los_reso   = 10*u.kpc
         self._los_size   = 2 * 2*u.Mpc
+
+
+    #==================================================
+    # Print parameters
+    #==================================================
+    
+    def print_param(self):
+        """
+        Print the current parameters describing the inference.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        The parameters are printed in the terminal
+        
+        """
+
+        print('=====================================================')
+        print('=============== Current Model() state ===============')
+        print('=====================================================')
+        
+        pp = pprint.PrettyPrinter(indent=4)
+        
+        par = self.__dict__
+        keys = list(par.keys())
+        
+        for k in range(len(keys)):
+            print(('--- '+(keys[k])[1:]))
+            print(('    '+str(par[keys[k]])))
+            print(('    '+str(type(par[keys[k]]))+''))
+        print('=====================================================')
 
         
     #==================================================

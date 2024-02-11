@@ -15,6 +15,7 @@ import astropy.constants as cst
 from astropy.coordinates import SkyCoord
 from scipy.interpolate import interp1d
 from multiprocessing import Pool, cpu_count
+import pprint
 import copy
 import emcee
 import corner
@@ -760,6 +761,7 @@ def lnlike_fluct(param,
                  model_ymap_sph,
                  model_ymap_sph_deconv,
                  model_pk2d_covmat_ref,
+                 model_pk2d_ref,
                  data_pk2d,
                  noise_pk2d_covmat,
                  noise_pk2d_mean,
@@ -769,7 +771,8 @@ def lnlike_fluct(param,
                  transfer_function,
                  kedges=None,
                  parinfo_noise=None,
-                 use_covmat=False):
+                 use_covmat=False,
+                 scale_model_variance=False):
     """
     This is the likelihood function used for the forward fit of the fluctuation spectrum.
         
@@ -792,7 +795,8 @@ def lnlike_fluct(param,
     - kedges (1d array): the edges of the k bins
     - parinfo_noise (dict): see parinfo_noise in get_pk3d_model_forward_fitting
     - use_covmat (bool): set to true to use the covariance matrix
-    
+    - scale_model_variance (bool): set to true to rescale the model variance according to the given model
+
     Outputs
     ----------
     - lnL (float): the value of the log likelihood
@@ -826,12 +830,22 @@ def lnlike_fluct(param,
 
     #========== Compute the likelihood
     if use_covmat: # Using the covariance matrix
-        covariance_inverse = np.linalg.pinv(noise_pk2d_covmat + model_pk2d_covmat_ref)
+        if scale_model_variance: # Here we assume that the correlation matrix does not depend on the model
+            correlation_ref = utils.correlation_from_covariance(model_pk2d_covmat_ref)
+            std_scaled = np.diag(model_pk2d_covmat_ref)**0.5 * (test_pk/model_pk2d_ref)
+            covariance_scaled = utils.covariance_from_correlation(correlation_ref, std_scaled)
+            covariance_inverse = np.linalg.inv(noise_pk2d_covmat + covariance_scaled)
+        else:
+            covariance_inverse = np.linalg.inv(noise_pk2d_covmat + model_pk2d_covmat_ref)
+            
         residual_test = model_pk2d - data_pk2d
         lnL = -0.5*np.matmul(residual_test, np.matmul(covariance_inverse, residual_test))
         
     else: # Using the rms only
-        variance = np.diag(noise_pk2d_covmat) + np.diag(model_pk2d_covmat_ref)
+        if scale_model_variance:
+            variance = np.diag(noise_pk2d_covmat) + np.diag(model_pk2d_covmat_ref)*(test_pk/model_pk2d_ref)**2
+        else:
+            variance = np.diag(noise_pk2d_covmat) + np.diag(model_pk2d_covmat_ref)
         lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / variance)
         
     lnL += prior
@@ -945,6 +959,39 @@ class Inference():
         self.mcmc_run      = mcmc_run
         self.mcmc_Nresamp  = mcmc_Nresamp
 
+
+    #==================================================
+    # Print parameters
+    #==================================================
+    
+    def print_param(self):
+        """
+        Print the current parameters describing the inference.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        The parameters are printed in the terminal
+        
+        """
+
+        print('=====================================================')
+        print('============= Current Inference() state =============')
+        print('=====================================================')
+        
+        pp = pprint.PrettyPrinter(indent=4)
+        
+        par = self.__dict__
+        keys = list(par.keys())
+        
+        for k in range(len(keys)):
+            print(('--- '+(keys[k])))
+            print(('    '+str(par[keys[k]])))
+            print(('    '+str(type(par[keys[k]]))+''))
+        print('=====================================================')
+        
         
     #==================================================
     # Define k edges from bining properties
@@ -1037,8 +1084,9 @@ class Inference():
                 image_noise_mc = noise_ymap_mc[imc,:,:]
                 
             image_noise_mc *= self.data.mask
-                        
-            noise_pk2d_mc[imc,:] = utils.get_pk2d(image_noise_mc, reso, kedges=kedges)[1]
+
+            k2d, pk_mc =  utils.get_pk2d(image_noise_mc, reso, kedges=kedges)
+            noise_pk2d_mc[imc,:] = pk_mc
             
         noise_pk2d_mean = np.mean(noise_pk2d_mc, axis=0)
         noise_pk2d_rms  = np.std(noise_pk2d_mc, axis=0)
@@ -1054,10 +1102,10 @@ class Inference():
         if np.sum(np.isnan(noise_pk2d_covmat)) > 0:
             if not self.silent:
                 print('Some pixels in the covariance matrix are NaN.')
-                print('This cna be that the number of bins is such that some bins are empty.')
+                print('This can be that the number of bins is such that some bins are empty.')
             raise ValueError('Issue with noise covariance matrix')
 
-        return noise_pk2d_mean, noise_pk2d_covmat
+        return k2d, noise_pk2d_mean, noise_pk2d_covmat
 
 
     #==================================================
@@ -1118,8 +1166,9 @@ class Inference():
                 test_image = test_ymap - model_ymap_sph
                 
             test_image *= self.data.mask
-            
-            model_pk2d_mc[imc,:] = utils.get_pk2d(test_image, reso, kedges=kedges)[1]
+
+            k2d, pk_mc =  utils.get_pk2d(test_image, reso, kedges=kedges)
+            model_pk2d_mc[imc,:] = pk_mc
             
         model_pk2d_mean = np.mean(model_pk2d_mc, axis=0)
         model_pk2d_rms = np.std(model_pk2d_mc, axis=0)
@@ -1137,7 +1186,7 @@ class Inference():
                 print('This cna be that the number of bins is such that some bins are empty.')
             raise ValueError('Issue with noise covariance matrix')
 
-        return model_pk2d_mean, model_pk2d_covmat
+        return k2d, model_pk2d_mean, model_pk2d_covmat
     
     
     #==================================================
@@ -1497,6 +1546,7 @@ class Inference():
                                         Nmc_noise=1000,
                                         kbin_edges=None,
                                         use_covmat=False,
+                                        scale_model_variance=False,
                                         show_fit_result=False):
         """
         This function brute force fits the 3d power spectrum
@@ -1522,9 +1572,11 @@ class Inference():
                         },
                        }  
         - parinfo_noise (dictionary): same as parinfo_fluct but for the noise, i.e. parameter 'ampli'
+        - Nmc_noise (int): the number of MC realization used for computing uncertainty (rms/covariance)
         - kbin_edges (1d array, quantity): array of k edges that can be used instead of default one, for 
         very specific bining
         - use_covmat (bool): set to true to use the covariance matrix or false for the rms only
+        - scale_model_variance (bool): set to true to rescale the model variance according to the given model
         - show_fit_result (bool): set to true to produce plots for fitting results
         
         Outputs
@@ -1589,8 +1641,8 @@ class Inference():
         k2d, data_pk2d = utils.get_pk2d(data_image, reso, kedges=kedges)
         
         #========== Deal with how the noise should be accounted for
-        noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc_noise)
-        model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc_noise)
+        bid, noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc_noise)
+        bid, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc_noise)
         
         #========== Define the MCMC setup
         backend = utils.define_emcee_backend(sampler_file, sampler_exist,
@@ -1604,6 +1656,7 @@ class Inference():
                                               model_ymap_sph,
                                               model_ymap_sph_deconv,
                                               model_pk2d_covmat,
+                                              model_pk2d_ref,
                                               data_pk2d,
                                               noise_pk2d_covmat,
                                               noise_pk2d_ref,
@@ -1613,8 +1666,9 @@ class Inference():
                                               self.data.transfer_function,
                                               kedges,
                                               parinfo_noise,
-                                              use_covmat],
-                                        pool=Pool(cpu_count()),
+                                              use_covmat,
+                                              scale_model_variance],
+                                        #pool=Pool(cpu_count()),
                                         moves=moves,
                                         backend=backend)
         
@@ -1622,14 +1676,17 @@ class Inference():
         if not self.silent: print('----- MCMC sampling -----')
         if self.mcmc_run:
             if not self.silent: print('      - Runing '+str(self.mcmc_nsteps)+' MCMC steps')
+            model_copy = copy.deepcopy(self.model)
             res = sampler.run_mcmc(pos, self.mcmc_nsteps, progress=True, store=True)
+            self.model = model_copy
         else:
             if not self.silent: print('      - Not running, but restoring the existing sampler')
-        
+            
         #========== Set the best-fit model
         if show_fit_result: self.get_fluct_model_forward_fitting_results(sampler,
                                                                          parinfo_fluct,
-                                                                         parinfo_noise=parinfo_noise)
+                                                                         parinfo_noise=parinfo_noise,
+                                                                         Nmc=Nmc_noise)
         
         #========== Make sure the model is set to the best fit
         best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
@@ -1689,8 +1746,8 @@ class Inference():
         reso = self.model.get_map_reso().to_value('arcsec')
         k2d, data_pk2d = utils.get_pk2d(data_image, reso, kedges=kedges)
 
-        noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc)
-        model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc)
+        bid, noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kedges*u.arcsec**-1, Nmc)
+        bid, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc)
                          
         #========== Get the best-fit
         best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
@@ -1726,9 +1783,7 @@ class Inference():
             elif self.method_fluctuation_image == 'subtract':
                 mc_image = mc_ymap - model_ymap_sph
             mc_image *= self.data.mask            
-            MC_pk2d[imc,:] = utils.get_pk2d(mc_image,
-                                            self.model.get_map_reso().to_value('arcsec'),
-                                            kedges=kedges)[1]
+            MC_pk2d[imc,:] = utils.get_pk2d(mc_image, reso, kedges=kedges)[1]
             
             # Get MC Pk3d
             MC_pk3d[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1].to_value('kpc3')
@@ -1743,30 +1798,8 @@ class Inference():
                                      model_pk2d_ref,
                                      np.diag(model_pk2d_covmat)**0.5, np.diag(noise_pk2d_covmat)**0.5,
                                      MC_pk2d, MC_pk2d_noise)
-
-
-
-
-
-    
-
-
-
-
-
-
-    
-
-    #==================================================
-    # Extract Pk 3D from deprojection
-    #==================================================
-    
-    def get_pk3d_deprojection(self):
-
-
-        return
-
-    
+        
+        
     #==================================================
     # Window function
     #==================================================
@@ -1810,10 +1843,9 @@ class Inference():
         N_theta = utils.trapz_loglog(W_ft_sort, k_z_sort, axis=2)*u.kpc**-1
     
         return N_theta
+    
 
-
-
-
+    
     '''
     #==================================================
     # Extract the 3D power spectrum

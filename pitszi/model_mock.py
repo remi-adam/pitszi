@@ -252,8 +252,8 @@ class ModelMock(object):
         #----- Get the flattened k norm 
         k3d_norm_flat = k3d_norm.flatten()
         
-        #----- Get the kmas isotropic
-        kmax_isosphere = utils.kmax_isotropic(Nx, Ny, Nz, proj_reso, los_reso) # 1/kpc
+        #----- Get the kmax isotropic
+        kmax_isosphere = self.get_kmax_isotropic().to_value('kpc-1')
 
         #----- Get the sampling range
         if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
