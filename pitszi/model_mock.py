@@ -76,18 +76,23 @@ class ModelMock(object):
     #==================================================
 
     def get_pressure_fluctuation_spectrum(self,
-                                          kvec=np.logspace(-1,2,100)*u.Mpc**-1):
+                                          kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
+                                          kmin_norm=None,
+                                          kmax_norm=None,
+                                          Npt_norm=10000):
         """
         Get the thermal electron pressure fluctuation spectrum (delta P / P).
         
         Parameters
         ----------
-        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - kmin/max_norm (quantity): the wavenumber range used for notmalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
 
         Outputs
         ----------
-        - radius (quantity): the 3d radius in unit of kpc
-        - p_r (quantity): the electron pressure profile in unit of keV cm-3
+        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
 
         """
 
@@ -98,27 +103,39 @@ class ModelMock(object):
         '''
         This part could go, as for the profile, in a generic fluctuation library and be read fom there
         '''
-        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':                
-            k = kvec.to_value('kpc-1')
+        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
 
-            # Extract the power spectrum components
+            if kmin_norm is None:
+                kmin = 1/(4*self._model_pressure_fluctuation['Linj'].to_value('kpc'))
+            else:
+                kmin = kmin_norm.to_value('kpc')
+            if kmax_norm is None:
+                kmax = 4/self._model_pressure_fluctuation['Ldis'].to_value('kpc')
+            else:
+                kmax = kmax_norm.to_value('kpc')
+                
+            kvec_norm = np.logspace(np.log10(kmin),np.log10(kmax),Npt_norm) # kpc
+
+            # First extract the normalization
+            cut_low  = np.exp(-(1/(kvec_norm*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
+            cut_high = np.exp(-(kvec_norm*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
+            pl = kvec_norm**self._model_pressure_fluctuation['slope']
+            f_k = pl * cut_high * cut_low
+            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
+
+            # Then compute Pk at requested scales
+            k = kvec.to_value('kpc-1')
             A = self._model_pressure_fluctuation['Norm']
             cut_low  = np.exp(-(1/(k*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
             cut_high = np.exp(-(k*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
             pl = k**self._model_pressure_fluctuation['slope']
-
-            # Define the power spectrum shape
-            f_k = pl * cut_high * cut_low
-
-            # Normalize so that the Norm A is the rms of the fluctuations
-            Normalization = utils.trapz_loglog(4*np.pi*k**2 * f_k, k)
-            P3d_k = A**2 * f_k / Normalization # adu * u1 / (u1*k**3) = kpc^3
+            P3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
         else:
             raise ValueError("No other model implemented yet")
-        
+       
         return kvec, P3d_k*u.kpc**3
-
-
+    
+    
     #==================================================
     # Pressure profile to grid
     #==================================================
