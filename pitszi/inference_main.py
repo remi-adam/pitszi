@@ -14,6 +14,7 @@ import astropy.units as u
 import astropy.constants as cst
 from astropy.coordinates import SkyCoord
 from scipy.interpolate import interp1d
+import scipy.stats as stats
 from multiprocessing import Pool, cpu_count
 import pprint
 import copy
@@ -906,6 +907,32 @@ class Inference():
         """
         Initialize the inference object. 
         All parameters can be changed on the fly.
+
+        List of caveats in deprojection
+        -------------------------------
+        Many subbtle Fourier sampling effects may alter the results. A deep investigation 
+        of possible biases is recommanded using simulated data (windowing, binning, etc).
+        Here is a non-exhaustive list of some identified effects:
+
+        *** Prior binning/mask/etc ***
+        - Small scales: the windowing by the profile P (\int P (1 + dP) dl) may generate some artifacts
+        for very steep fluctuation spectra at high k. This is an issue in the simulation, not the model. 
+        The power spectrum of the signal then present anisotropies in the 2d. In practice, this should 
+        be unsignificant because we do not expect such steep spectra and beam smoothing should kill 
+        these scales anyway.
+        - Large scales: the window function drops for k_z above a given cutoff, justifying the approximation
+        that Pk2d \propto Pk3d (Churazov+2012, Eq 11). However, the approximation may break significantly 
+        at low k, for spectra with low power on large scales since 
+        \int W(kz) x P3d(sqrt(kx^2 + ky^2 + kz^2)) dkz --> P3d(sqrt(kx^2 + ky^2)) \int W(kz) dkz
+        is no longer valid. Also note that the approximation holds better for flatter profiles since the window 
+        function is sharper.
+        - All scales: the input to recover spctra seems accurate within +/-5% depending on the exact grid choice
+        - Profile truncation : any sharp discountinuity in P(r), e.g. due to a truncation above some limit, etc., 
+        may introduce features in the power spectra
+
+        *** Prior binning/mask/etc ***
+        
+
         
         Parameters
         ----------
@@ -919,8 +946,8 @@ class Inference():
         (implemented: 'ratio' or 'subtract')
         - method_noise_covmat (str): method to compute noise MC realization 
         (implemented: 'model' or 'covariance')
-        - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to angle)
-        - kbin_max (quantity): maximal k value for the 2D power spectrum (homogeneous to angle)
+        - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
+        - kbin_max (quantity): maximal k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
         - kbin_Nbin (int): number of bins in the 2d power spectrum
         - kbin_scale (str): bin spacing ('lin' or 'log')
         - mcmc_nwalkers (int): number of MCMC walkers
@@ -997,9 +1024,9 @@ class Inference():
     # Define k edges from bining properties
     #==================================================
     
-    def get_kedges(self):
+    def get_kedges(self, physical=False):
         """
-        This function compute the edges of the bins in k space
+        This function compute the edges of the bins in k space.
         
         Parameters
         ----------
@@ -1009,18 +1036,129 @@ class Inference():
         - kedges (1d array): the edges of the bins 
 
         """
-
-        kmin_sampling = self.kbin_min.to_value('arcsec-1')
-        kmax_sampling = self.kbin_max.to_value('arcsec-1')
         
+        # Get the kmin and kmax in the right unit
+        try:
+            kmin_sampling = self.kbin_min.to_value('arcsec-1')
+            kmax_sampling = self.kbin_max.to_value('arcsec-1')
+            unit = u.arcsec**-1
+        except:
+            kmin_sampling = self.kbin_min.to_value('kpc-1')
+            kmax_sampling = self.kbin_max.to_value('kpc-1')
+            unit = u.kpc**-1
+
+        # Define the bining
         if self.kbin_scale == 'lin':
             kbins = np.linspace(kmin_sampling, kmax_sampling, self.kbin_Nbin+1)
         elif self.kbin_scale == 'log':
             kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), self.kbin_Nbin+1)
         else:
-            raise ValueError("Only lin or log scales are allowed. Here self.kbin_scale="+self.kbin_scale)
+            raise ValueError("Only lin or log scales are allowed. Here self.kbin_scale = "+self.kbin_scale)
 
-        return kbins*u.arcsec**-1
+        # Define the output unit
+        if physical:
+            if unit == u.arcsec**-1:
+                kbins = kbins * (3600*180/np.pi) / self.model.D_ang.to_value('kpc') * u.kpc**-1
+            elif unit == u.kpc**-1:
+                kbins = kbins*u.kpc**-1
+        else:
+            if unit == u.arcsec**-1:
+                kbins = kbins * u.arcsec**-1
+            elif unit == u.kpc**-1:
+                kbins = (kbins * self.model.D_ang.to_value('kpc')) / (3600*180/np.pi) * u.arcsec**-1
+
+        return kbins
+
+
+    #==================================================
+    # Return the number of counts per bin
+    #==================================================
+    
+    def get_kbin_counts(self, kedges=None):
+        """
+        Give the number of counts in each k bin, given the grid sampling and the 
+        bin edges. The default bin edges are provided by get_kedges function
+        
+        Parameters
+        ----------
+        - kedges (quantity array): the bin edges in units of 1/angle or 1/distance
+        
+        Outputs
+        ----------
+        - kbin_counts (1d array): the counts in each bins 
+
+        """
+
+        # Get the k edges if not provided
+        if kedges is None:
+            kedges = self.get_kedges()
+
+        # Define the grid size
+        Nx, Ny = self.data.image.shape
+
+        # Get the resolution in the right unit (physical or angle)
+        try:
+            kedges = kedges.to_value('arcsec-1')
+            reso = self.model.get_map_reso(physical=False).to_value('arcsec')
+        except:
+            kedges = kedges.to_value('kpc-1')
+            reso = self.model.get_map_reso(physical=True).to_value('kpc')
+
+        # Grid sampling in k space
+        k_x = np.fft.fftfreq(Nx, reso)
+        k_y = np.fft.fftfreq(Ny, reso)
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
+
+        # Bining and counting
+        kbin_counts, _, _ = stats.binned_statistic(k2d_norm.flatten(), k2d_norm.flatten(),
+                                                   statistic='count', bins=kedges)
+
+        # Information
+        if not self.silent:
+            print('----- Minimal bin counts:', np.amin(kbin_counts))
+            print('----- Counts in each k bin:', kbin_counts)
+
+        return kbin_counts
+
+    
+    #==================================================
+    # Return the number of counts per bin
+    #==================================================
+    
+    def get_k_grid(self, physical=False):
+        """
+        Give the grid in kspace
+        
+        Parameters
+        ----------
+        - physical (bool): set to true to have 1/kpc units. Otherwise 1/arcsec.
+
+        Outputs
+        ----------
+        - kx, ky (2d array): the k grid along x and y
+        - knorm (2d array): the grid of the k normalization
+
+        """
+
+        # Define the grid size
+        Nx, Ny = self.data.image.shape
+
+        # Get the resolution in the right unit (physical or angle)
+        if physical:
+            reso = self.model.get_map_reso(physical=True).to_value('kpc')
+            unit = u.kpc**-1
+        else:
+            reso = self.model.get_map_reso(physical=False).to_value('arcsec')
+            unit = u.arcsec**-1
+
+        # Grid sampling in k space
+        k_x = np.fft.fftfreq(Nx, reso)
+        k_y = np.fft.fftfreq(Ny, reso)
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
+
+        return k2d_x*unit, k2d_y*unit, k2d_norm*unit
 
 
     #==================================================
@@ -1183,7 +1321,7 @@ class Inference():
         if np.sum(np.isnan(model_pk2d_covmat)) > 0:
             if not self.silent:
                 print('Some pixels in the covariance matrix are NaN.')
-                print('This cna be that the number of bins is such that some bins are empty.')
+                print('This can be that the number of bins is such that some bins are empty.')
             raise ValueError('Issue with noise covariance matrix')
 
         return k2d, model_pk2d_mean, model_pk2d_covmat
@@ -1843,7 +1981,83 @@ class Inference():
         N_theta = utils.trapz_loglog(W_ft_sort, k_z_sort, axis=2)*u.kpc**-1
     
         return N_theta
+
+
+    #==================================================
+    # Window function
+    #==================================================
     
+    def get_p2d_from_p3d_from_window_function_exact(self):
+        """
+        This function computes P2d from P3d by integrating the window function and Pk3d.
+        Warning, for large grids, this may take a lot of time! Use it wisely.
+        
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - k2d_norm (2d np array): the values of projected k
+        - Pk2d (2d np array): the 2D power spectrum for each k2d_norm
+
+        """
+
+        #----- Get the grid
+        Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.model.get_3dgrid()
+
+        #----- Get the pressure profile model
+        pressure3d_sph  = self.model.get_pressure_cube_profile()
+
+        #----- Get the Compton model
+        compton_sph = self.model.get_sz_map(no_fluctuations=True)
+        compton3d = np.repeat(compton_sph[:,:,np.newaxis], pressure3d_sph.shape[2], axis=2)
+
+        #----- Compute the window function in real space
+        W3d = (cst.sigma_T / (cst.m_e * cst.c**2)* pressure3d_sph / compton3d).to_value('kpc-1')
+
+        #----- Window function in Fourier space along kz
+        W_ft = np.abs(np.fft.fft(W3d, axis=2))**2 * los_reso**2 # No dimension
+
+        #----- Defines k   
+        k_x = np.fft.fftfreq(Nx, proj_reso)
+        k_y = np.fft.fftfreq(Ny, proj_reso)
+        k_z = np.fft.fftfreq(Nz, los_reso)
+        k3d_x, k3d_y, k3d_z = np.meshgrid(k_x, k_y, k_z, indexing='ij')
+        k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
+        
+        #----- Compute Pk3d over sampled k
+        k3d_norm_flat = k3d_norm.flatten()
+        idx_sort = np.argsort(k3d_norm_flat)  # Index to rearange by sorting 
+        revidx = np.argsort(idx_sort)         # Index to invert rearange by sorting
+        k3d_norm_flat_sort = np.sort(k3d_norm_flat)
+        _, P3d_flat_sort = self.model.get_pressure_fluctuation_spectrum(k3d_norm_flat_sort[1:]*u.kpc**-1)
+        P3d_flat_sort = P3d_flat_sort.to_value('kpc3')
+        P3d_flat_sort = np.append(np.array([0]), P3d_flat_sort) # Add k=0 back
+        P3d_flat = P3d_flat_sort[revidx]       # Unsort
+        P3d = P3d_flat.reshape(Nx,Ny,Nz)       # Reshape to k cube
+        
+        #----- Sort along kz       
+        k_z_sort = np.fft.fftshift(k_z)
+        W_ft_sort = np.fft.fftshift(W_ft, axes=2)
+        P3d_kzsort = np.fft.fftshift(P3d, axes=2)
+
+        #----- integrate along kz
+        Pk2d = np.zeros((Nx, Ny)) # Shape kx, ky
+        # Make a loop to avoid memory issue (otherwise 5d array kx, ky, x, y, k_z integrated along kz)
+        #integrand = P3d_kzsort[:,:,np.newaxis,np.newaxis,:]*W_ft_sort[np.newaxis, np.newaxis, :,:,:] # kx, ky, x, y, k_z
+        #Pk2d_xy = utils.trapz_loglog(integrand, k_z_sort, axis=4) #kx, ky, x, y
+        #mask_kxky = self.data.mask[np.newaxis, np.newaxis, :,:]
+        #Pk2d_exact = np.sum(Pk2d_xy * mask_kxky, axis=(2,3)) / np.sum(mask_kxky, axis=(2,3)) #kpc2
+        for ik in range(Nx):
+            for jk in range(Ny):
+                integrand = P3d_kzsort[ik,jk,np.newaxis,np.newaxis,:]*W_ft_sort
+                Pk2d_ikjk_xy = utils.trapz_loglog(integrand, k_z_sort, axis=2)
+                Pk2d[ik,jk] = np.sum(Pk2d_ikjk_xy * self.data.mask) / np.sum(self.data.mask)
+
+        return k2d_norm*u.kpc**-1, Pk2d*u.kpc**2
+
 
     
     '''
