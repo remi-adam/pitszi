@@ -267,7 +267,7 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
     FT_map = np.fft.fft2(image)
 
     # Beam smoothing
-    if apps_beam:
+    if apps_beam and beamFWHM>0:
         sigma2fwhm = 2 * np.sqrt(2*np.log(2))
         FT_map_sm = fourier_gaussian(FT_map, sigma=beamFWHM/sigma2fwhm/reso)
     else:
@@ -367,8 +367,11 @@ def deconv_pk_beam(k, pk, beamFWHM):
     - pk_deconv (np array): the deconvolved pk
 
     """
-    
-    Beam_k = gaussian_pk(k, beamFWHM)
+
+    if beamFWHM > 0:
+        Beam_k = gaussian_pk(k, beamFWHM)
+    else:
+        Beam_k = 1
     pk_deconv = pk/Beam_k**2
 
     return pk_deconv
@@ -394,8 +397,11 @@ def apply_pk_beam(k, pk, beamFWHM):
     - pk_conv (np array): the convolved pk
 
     """
-    
-    Beam_k = gaussian_pk(k, beamFWHM)
+
+    if beamFWHM > 0:
+        Beam_k = gaussian_pk(k, beamFWHM)
+    else:
+        Beam_k = 1
     pk_conv = pk*Beam_k**2
 
     return pk_conv

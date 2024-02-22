@@ -102,6 +102,7 @@ class ModelMock(object):
         # compute the model
         '''
         This part could go, as for the profile, in a generic fluctuation library and be read fom there
+        This can be done when the library includes more functionnal forms
         '''
         if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
 
@@ -113,17 +114,18 @@ class ModelMock(object):
                 kmax = 4/self._model_pressure_fluctuation['Ldis'].to_value('kpc')
             else:
                 kmax = kmax_norm.to_value('kpc')
-                
-            kvec_norm = np.logspace(np.log10(kmin),np.log10(kmax),Npt_norm) # kpc
 
-            # First extract the normalization
+            # K array for normalization
+            kvec_norm = np.logspace(np.log10(kmin),np.log10(kmax), Npt_norm) # kpc
+
+            # First extract the normalization givenintegrating within some k range
             cut_low  = np.exp(-(1/(kvec_norm*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
             cut_high = np.exp(-(kvec_norm*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
             pl = kvec_norm**self._model_pressure_fluctuation['slope']
             f_k = pl * cut_high * cut_low
             Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
 
-            # Then compute Pk at requested scales
+            # Then compute Pk at requested scales accounting for the normalization
             k = kvec.to_value('kpc-1')
             A = self._model_pressure_fluctuation['Norm']
             cut_low  = np.exp(-(1/(k*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
@@ -190,6 +192,12 @@ class ModelMock(object):
         rad_grid = np.sqrt((rot_coord_x)**2 + (rot_coord_y)**2 + (rot_coord_z)**2)
         rad_grid_flat = rad_grid.flatten()
 
+        '''
+        To Do :
+        Evaluate log P(r) for r at the nodes of the grid. Then interpolate at the center using 
+        scipy.interpolate.interpn
+        '''
+
         #----- Get the pressure profile in 1d
         rad = utils.sampling_array(self._Rmin, self._R_truncation, NptPd=100, unit=True)
         rad, p_rad = self.get_pressure_profile(rad)
@@ -229,7 +237,6 @@ class ModelMock(object):
         """
         Fill the grid with pressure fluctuation, i.e. delta P / P(r)
         
-        
         Parameters
         ----------
         - seed (bool): set to a number for reproducible fluctuations
@@ -266,65 +273,25 @@ class ModelMock(object):
         k3d_x, k3d_y, k3d_z = np.meshgrid(k_x, k_y, k_z, indexing='ij')
         k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
     
-        #----- Get the flattened k norm 
-        k3d_norm_flat = k3d_norm.flatten()
-        
-        #----- Get the kmax isotropic
+        #----- Get the Pk model on the grid
+        k3d_norm_flat = k3d_norm.flatten()                      # Flatten the k3d array
+        idx_sort = np.argsort(k3d_norm_flat)                    # Get the sorting index
+        revidx = np.argsort(idx_sort)                           # Index to invert rearange by sorting
+        k3d_norm_flat_sort = np.sort(k3d_norm_flat)             # Sort the k array
+        _, P3d_flat_sort = self.get_pressure_fluctuation_spectrum(k3d_norm_flat_sort[1:]*u.kpc**-1)
+        P3d_flat_sort = P3d_flat_sort.to_value('kpc3')          # Take the unit out
+        P3d_flat_sort = np.append(np.array([0]), P3d_flat_sort) # Add P(k=0) = 0 back
+        P3d_flat = P3d_flat_sort[revidx]                        # Unsort
+        P3d_k_grid = P3d_flat.reshape(Nx,Ny,Nz)                 # Unflatten to k cube
+                
+        #----- kill the unwanted mode: zero level and values beyond isotropic range if requested
         kmax_isosphere = self.get_kmax_isotropic().to_value('kpc-1')
 
-        #----- Get the sampling range
-        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
-            if kmin_input is None:
-                kmin = 1/(4*self._model_pressure_fluctuation['Linj'].to_value('kpc'))
-            else:
-                kmin = kmin_input
-            if kmax_input is None:
-                kmax = 4/self._model_pressure_fluctuation['Ldis'].to_value('kpc')
-            else:
-                kmax = kmax_input
-        else:
-            if kmin_input is None:
-                kmin = np.amin([1/(Nx*proj_reso), 1/(Ny*proj_reso), 1/(Nz*los_reso)])
-            else:
-                kmin = kmin_input
-            if kmax_input is None:
-                kmax = kmax_isosphere
-            else:
-                kmax = kmax_input 
-
-        #----- Get the Pk model 
-        k = np.logspace(np.log10(kmin),np.log10(kmax), Npt)*u.kpc**-1
-        k, P3d_k = self.get_pressure_fluctuation_spectrum(k)    
-
-        #----- interpolate the Pk on the flattened grid
-        itpl = interp1d(k.to_value('kpc-1'), P3d_k.to_value('kpc3'),
-                        kind='linear', fill_value=0, bounds_error=False)
-        cond1 = np.amin(k3d_norm_flat[k3d_norm_flat >0]) < np.amin(k.to_value('kpc-1'))
-        cond2 = np.amax(k3d_norm_flat) > np.amax(k.to_value('kpc-1'))
-        if not self.silent and (cond1 or cond2):
-            print('----- INFO: interpolation of the input Pk in the sampling box.')
-            print('            input    k = [',kmin,',',kmax,'] kpc^-1')
-            print('            sampling k = [', np.amin(k3d_norm_flat[k3d_norm_flat >0]),',',np.amax(k3d_norm_flat),'] kpc^-1')
-            print('            Sampling box k modes that are beyond the interpolation range are set to 0.')
-
-        P3d_k_grid_flat = itpl(k3d_norm_flat)
-    
-        #----- Get the Pk interpolated on the 3d grid
-        P3d_k_grid = P3d_k_grid_flat.reshape(Nx, Ny, Nz)
-
-        #----- kill the unwanted mode: zero level and values beyond isotropic range if requested
         if force_isotropy:
-            P3d_k_grid[k3d_norm > kmax_isosphere] = 0
-        P3d_k_grid[k3d_norm == 0] = 0
-
-        if not self.silent:
-            print('----- INFO: isotropy and k=0 mode.')
-            print('            Modes with k=0 are set to 0.')
-            print('            The maximum sampling k for having isotropy is ', kmax_isosphere, ' kpc^-1')
-            print('            This corresponds to a Nyquist sampling resolution ', 1/(2*kmax_isosphere), ' kpc')
-            if force_isotropy:
+            if not self.silent:
                 print('            Non isotropic modes k>',kmax_isosphere,' kpc^-1 are set to zero.')
-                
+            P3d_k_grid[k3d_norm > kmax_isosphere] = 0
+
         #----- Compute the amplitude
         amplitude =  np.sqrt(P3d_k_grid / (proj_reso*proj_reso*los_reso))
 
@@ -384,7 +351,7 @@ class ModelMock(object):
         #----- Go to Compton
         intPdl = np.sum(pressure_profile_cube*(1 + pressure_fluctuation_cube), axis=2) * self._los_reso
         compton = (cst.sigma_T / (cst.m_e * cst.c**2) * intPdl).to_value('')
-
+        
         #----- Convolution with instrument response
         if (irfs_convolution_beam is not None) or (irfs_convolution_TF is not None):
             if irfs_convolution_beam is not None:

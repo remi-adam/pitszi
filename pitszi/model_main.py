@@ -153,7 +153,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         #---------- Cluster boundary
         self._R_truncation     = 3*self._R500
         self._theta_truncation = ((self._R_truncation / self._D_ang).to('') * u.rad).to('deg')
-        self._Rmin = 1.0*u.kpc
+        self._Rmin = 10.0*u.kpc
 
         #---------- ICM composition (default: protosolar from Lodders et al 2009: arxiv0901.1149)
         self._helium_mass_fraction = 0.2735
