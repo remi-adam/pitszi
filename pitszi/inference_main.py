@@ -908,8 +908,8 @@ class Inference():
         Initialize the inference object. 
         All parameters can be changed on the fly.
 
-        List of caveats in deprojection
-        -------------------------------
+        List of caveats in model projection/deprojection from Pk3d
+        ----------------------------------------------------------
         Many subbtle Fourier sampling effects may alter the results. A deep investigation 
         of possible biases is recommanded using simulated data (windowing, binning, etc).
         Here is a non-exhaustive list of some identified effects:
@@ -917,7 +917,7 @@ class Inference():
         *** Prior binning/mask/etc ***
         - Small scales: the windowing by the profile P (\int P (1 + dP) dl) may generate some artifacts
         for very steep fluctuation spectra at high k. This is an issue in the simulation, not the model. 
-        The power spectrum of the signal then present anisotropies in the 2d. In practice, this should 
+        The power spectrum of the signal then present anisotropies in 2d. In practice, this should 
         be unsignificant because we do not expect such steep spectra and beam smoothing should kill 
         these scales anyway.
         - Large scales: the window function drops for k_z above a given cutoff, justifying the approximation
@@ -930,9 +930,9 @@ class Inference():
         - Profile truncation : any sharp discountinuity in P(r), e.g. due to a truncation above some limit, etc., 
         may introduce features in the power spectra
 
-        *** Prior binning/mask/etc ***
+        *** From binning/mask/etc ***
+        - 
         
-
         
         Parameters
         ----------

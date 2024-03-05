@@ -1000,3 +1000,4 @@ def get_pk2d_arevalo(image, proj_reso,
         Pk = Pk/bias
 
     return k2d, Pk
+
