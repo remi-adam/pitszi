@@ -24,7 +24,8 @@ import corner
 from minot.ClusterTools.map_tools import radial_profile_sb
 
 from pitszi import utils
-from pitszi import plotlib
+from pitszi import utils_fitting
+from pitszi import utils_plot
 
 
 #==================================================
@@ -1373,29 +1374,29 @@ class Inference():
                 print('The burnin could not be remove because it is larger than the chain size')
             
         #---------- Compute statistics for the chains
-        utils.chains_statistics(par_chains, lnl_chains,
-                                parname=parlist,
-                                conf=conf,
-                                outfile=self.output_dir+'/MCMC'+extraname+'_chain_statistics.txt')
+        utils_fitting.chains_statistics(par_chains, lnl_chains,
+                                        parname=parlist,
+                                        conf=conf,
+                                        outfile=self.output_dir+'/MCMC'+extraname+'_chain_statistics.txt')
 
         # Produce 1D plots of the chains
-        plotlib.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
+        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
         
         # Produce 1D histogram of the chains
         namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_hist_'+i+'.pdf' for i in parlist]
-        plotlib.chains_1Dhist(par_chains, parlist, namefiles,
-                              conf=conf, truth=truth)
+        utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
+                                 conf=conf, truth=truth)
 
         # Produce 2D (corner) plots of the chains
-        plotlib.chains_2Dplots_corner(par_chains,
-                                      parlist,
-                                      self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
-                                      truth=truth)
+        utils_plot.chains_2Dplots_corner(par_chains,
+                                         parlist,
+                                         self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
+                                         truth=truth)
 
-        plotlib.chains_2Dplots_sns(par_chains,
-                                   parlist,
-                                   self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
-                                   truth=truth)
+        utils_plot.chains_2Dplots_sns(par_chains,
+                                      parlist,
+                                      self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
+                                      truth=truth)
 
         
     #==================================================
@@ -1449,7 +1450,7 @@ class Inference():
         
         #========== Check if the MCMC sampler was already recorded
         sampler_file = self.output_dir+'/pitszi_MCMC_profile_sampler.h5'
-        sampler_exist = utils.check_sampler_exist(sampler_file, silent=False)
+        sampler_exist = utils_fitting.check_sampler_exist(sampler_file, silent=False)
             
         #========== Defines the fit parameters
         # Fit parameter list and information
@@ -1461,7 +1462,7 @@ class Inference():
         ndim = len(par0_value)
         
         # Starting points of the chains
-        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
+        pos = utils_fitting.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
         if sampler_exist and (not self.mcmc_reset): pos = None
 
         if not self.silent:
@@ -1490,8 +1491,8 @@ class Inference():
             noise_property = self.data.noise_rms
 
         #========== Define the MCMC setup
-        backend = utils.define_emcee_backend(sampler_file, sampler_exist,
-                                             self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
+        backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
+                                                     self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
         moves = emcee.moves.StretchMove(a=2.0)
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_profile, 
@@ -1523,7 +1524,7 @@ class Inference():
                                                                           parinfo_ZL=parinfo_ZL)
             
         #========== Compute the best-fit model and set it
-        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.model, best_ZL = lnlike_setpar_profile(best_par, self.model,
                                                     parinfo_profile,
                                                     parinfo_center=parinfo_center,
@@ -1587,7 +1588,7 @@ class Inference():
         rms_prof[~np.isfinite(rms_prof)] = np.nan
         
         #========== Get the best-fit
-        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         best_model, best_ZL = lnlike_setpar_profile(best_par, self.model,
                                                     parinfo_profile,
                                                     parinfo_center=parinfo_center,
@@ -1633,7 +1634,7 @@ class Inference():
         MC_y_profile        = np.zeros((self.mcmc_Nresamp, len(r2d)))
         MC_pressure_profile = np.zeros((self.mcmc_Nresamp, len(r3d)))
         
-        MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
+        MC_pars = utils_fitting.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
         for i in range(self.mcmc_Nresamp):
             # Get MC model
             mc_model, mc_ZL = lnlike_setpar_profile(MC_pars[i,:], self.model, parinfo_profile,
@@ -1654,25 +1655,25 @@ class Inference():
             MC_pressure_profile[i,:] = mc_model.get_pressure_profile()[1].to_value('keV cm-3')
 
         #========== plots map
-        plotlib.show_fit_result_ymap(self.output_dir+'/MCMC_radial_results_y_map.pdf',
-                                     self.data.image,
-                                     self.data.header,
-                                     noise_mc,
-                                     best_ymap_sph,
-                                     mask=self.data.mask,
-                                     visu_smooth=visu_smooth.to_value('arcsec'))
+        utils_plot.show_fit_result_ymap(self.output_dir+'/MCMC_radial_results_y_map.pdf',
+                                        self.data.image,
+                                        self.data.header,
+                                        noise_mc,
+                                        best_ymap_sph,
+                                        mask=self.data.mask,
+                                        visu_smooth=visu_smooth.to_value('arcsec'))
         
         #========== plots ymap profile
-        plotlib.show_fit_ycompton_profile(self.output_dir+'/MCMC_radial_results_y_profile.pdf',
-                                          r2d, data_yprof, data_yprof_err,
-                                          best_y_profile, MC_y_profile,
-                                          true_compton_profile=true_compton_profile)
+        utils_plot.show_fit_ycompton_profile(self.output_dir+'/MCMC_radial_results_y_profile.pdf',
+                                             r2d, data_yprof, data_yprof_err,
+                                             best_y_profile, MC_y_profile,
+                                             true_compton_profile=true_compton_profile)
         
         #========== plots pressure profile
-        plotlib.show_fit_result_pressure_profile(self.output_dir+'/MCMC_radial_results_P_profile.pdf',
-                                                 r3d, best_pressure_profile, MC_pressure_profile,
-                                                 true_pressure_profile=true_pressure_profile)
-    
+        utils_plot.show_fit_result_pressure_profile(self.output_dir+'/MCMC_radial_results_P_profile.pdf',
+                                                    r3d, best_pressure_profile, MC_pressure_profile,
+                                                    true_pressure_profile=true_pressure_profile)
+        
     
     #==================================================
     # Compute the Pk contraint via forward fitting
@@ -1727,7 +1728,7 @@ class Inference():
 
         #========== Check if the MCMC sampler was already recorded
         sampler_file = self.output_dir+'/pitszi_MCMC_fluctuation_sampler.h5'
-        sampler_exist = utils.check_sampler_exist(sampler_file, silent=False)
+        sampler_exist = utils_fitting.check_sampler_exist(sampler_file, silent=False)
             
         #========== Defines the fit parameters
         # Fit parameter list and information
@@ -1736,7 +1737,7 @@ class Inference():
         ndim = len(par0_value)
         
         # Starting points of the chains
-        pos = utils.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
+        pos = utils_fitting.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
         if sampler_exist and (not self.mcmc_reset): pos = None
 
         if not self.silent:
@@ -1783,8 +1784,8 @@ class Inference():
         bid, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc_noise)
         
         #========== Define the MCMC setup
-        backend = utils.define_emcee_backend(sampler_file, sampler_exist,
-                                             self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
+        backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
+                                                     self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
         moves = emcee.moves.KDEMove()
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_fluct,
@@ -1827,7 +1828,7 @@ class Inference():
                                                                          Nmc=Nmc_noise)
         
         #========== Make sure the model is set to the best fit
-        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.model, best_noise = lnlike_setpar_fluct(best_par, self.model,
                                                      parinfo_fluct,
                                                      parinfo_noise=parinfo_noise)
@@ -1888,7 +1889,7 @@ class Inference():
         bid, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kedges*u.arcsec**-1, Nmc)
                          
         #========== Get the best-fit
-        best_par = utils.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         best_model, best_Anoise = lnlike_setpar_fluct(best_par, self.model,
                                                       parinfo_fluct,
                                                       parinfo_noise=parinfo_noise)
@@ -1903,7 +1904,7 @@ class Inference():
         MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
         MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
         
-        MC_pars = utils.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
+        MC_pars = utils_fitting.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
         for imc in range(self.mcmc_Nresamp):
             # Get MC model
             mc_model, mc_Anoise = lnlike_setpar_fluct(MC_pars[imc,:], self.model, parinfo_fluct,
@@ -1927,15 +1928,15 @@ class Inference():
             MC_pk3d[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1].to_value('kpc3')
         
         #========== Plot the Pk3d constraint
-        plotlib.show_fit_result_pk3d(self.output_dir+'/MCMC_fluctuation_results_pk3d.pdf',
-                                    k3d, best_pk3d, MC_pk3d, true_pk3d=true_pk3d)
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_fluctuation_results_pk3d.pdf',
+                                        k3d, best_pk3d, MC_pk3d, true_pk3d=true_pk3d)
 
         #========== Plot the Pk2d constraint
-        plotlib.show_fit_result_pk2d(self.output_dir+'/MCMC_fluctuation_results_pk2d.pdf',
-                                     k2d, data_pk2d,
-                                     model_pk2d_ref,
-                                     np.diag(model_pk2d_covmat)**0.5, np.diag(noise_pk2d_covmat)**0.5,
-                                     MC_pk2d, MC_pk2d_noise)
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_fluctuation_results_pk2d.pdf',
+                                        k2d, data_pk2d,
+                                        model_pk2d_ref,
+                                        np.diag(model_pk2d_covmat)**0.5, np.diag(noise_pk2d_covmat)**0.5,
+                                        MC_pk2d, MC_pk2d_noise)
         
         
     #==================================================
