@@ -221,7 +221,7 @@ class ModelSampling(object):
         
         # Define the z axis
         Nz_min = (self._los_size / self._los_reso).to_value('')
-        Nz = np.int(np.ceil(Nz_min))
+        Nz = int(np.ceil(Nz_min))
         
         return Nx, Ny, Nz, proj_reso, proj_reso, self._los_reso.to_value('kpc')
 

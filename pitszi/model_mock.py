@@ -16,6 +16,7 @@ import astropy.constants as cst
 from scipy.spatial.transform import Rotation
 
 from pitszi import utils
+from pitszi import utils_pk
 
 
 #==================================================
@@ -60,7 +61,7 @@ class ModelMock(object):
         - p_r (quantity): the electron pressure profile in unit of keV cm-3
 
         """
-
+        
         # In case the input is not an array
         radius = utils.check_qarray(radius, unit='kpc')
 
@@ -369,10 +370,10 @@ class ModelMock(object):
                 kref = np.linspace(0, 1, 1000)*u.arcsec**-1
                 TF = {'k':kref, 'TF':kref.value*0+1}
                 
-            compton = utils.apply_transfer_function(compton,
-                                                    self.get_map_reso().to_value('arcsec'),
-                                                    psf_fwhm, TF,
-                                                    apps_TF_LS=apps_TF_LS, apps_beam=apps_beam)
+            compton = utils_pk.apply_transfer_function(compton,
+                                                       self.get_map_reso().to_value('arcsec'),
+                                                       psf_fwhm, TF,
+                                                       apps_TF_LS=apps_TF_LS, apps_beam=apps_beam)
             
         return compton
 

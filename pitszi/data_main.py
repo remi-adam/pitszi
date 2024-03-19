@@ -18,7 +18,7 @@ import pickle
 import pprint
 
 from minot.ClusterTools import map_tools
-from pitszi import utils
+from pitszi import utils_pk
 
 
 #==================================================
@@ -472,11 +472,11 @@ class Data():
         input_model = model.get_sz_map(seed=model_seed, no_fluctuations=model_no_fluctuations)
         
         # Convolve with instrument response function
-        convolved_model = utils.apply_transfer_function(input_model,
-                                                        model.get_map_reso().to_value('arcsec'),
-                                                        self.psf_fwhm.to_value('arcsec'),
-                                                        self.transfer_function,
-                                                        apps_TF_LS=True, apps_beam=True)
+        convolved_model = utils_pk.apply_transfer_function(input_model,
+                                                           model.get_map_reso().to_value('arcsec'),
+                                                           self.psf_fwhm.to_value('arcsec'),
+                                                           self.transfer_function,
+                                                           apps_TF_LS=True, apps_beam=True)
         
         # Add noise realization
         if noise_origin == 'model':
