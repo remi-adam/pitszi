@@ -61,7 +61,7 @@ def beam_wf_mn(kx2d, ky2d, FWHM):
     
     sigma = FWHM / sigma2fwhm
     k_0 = 1 / (np.sqrt(2) * np.pi * sigma)
-    G_k = np.exp(-(k2d_x**2 + k2d_y**2) / k_0**2)
+    G_k = np.exp(-(kx2d**2 + ky2d**2) / k_0**2)
     
     return G_k
 
@@ -152,7 +152,8 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
 #==================================================
 # Apply NIKA-like transfer function
 #==================================================
-def deconv_transfer_function(image, reso, TF):
+
+def deconv_transfer_function(image, reso, beamFWHM, TF, dec_TF_LS=True, dec_beam=True):
     """
     Deconvolve SZ image from instrumental transfer function.
     
@@ -160,9 +161,12 @@ def deconv_transfer_function(image, reso, TF):
     ----------
     - image (np array): input raw image
     - reso (float): map resolution in arcsec
+    - beamFWHM (float): the map beam FWHM in units of arcsec
     - TF (dict): dictionary with 'k' (unit homogeneous to 1/arcsec) 
     and 'TF' as keys, i.e. two np arrays containing the k and the 
     transfer function
+    - dec_TF_LS (bool): set to true to deconvol the large scale TF filtering
+    - dec_beam (bool): set to true to deconvol beam smoothing
         
     Outputs
     ----------
@@ -181,22 +185,36 @@ def deconv_transfer_function(image, reso, TF):
     k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
     k2d_norm_flat = k2d_norm.flatten()
 
-    # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
-    itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=(0,1))
-    filtering_flat = itpl(k2d_norm_flat)
-    filtering = np.reshape(filtering_flat, k2d_norm.shape)
+    #===== Beam smoothing
+    if dec_beam:
+        beam_mn = beam_wf_mn(k2d_x, k2d_y, beamFWHM)
+        FT_map_B = FT_map / beam_mn
+
+    else:
+        FT_map_B = FT_map*1+0
+            
+    #===== TF filtering
+    if dec_TF_LS:
+        # interpolate by putting 1 outside the definition of the TF, i.e. no filtering, e.g. very small scale
+        itpl = interp1d(TF['k'].to_value('arcsec-1'), TF['TF'], bounds_error=False, fill_value=(0,1))
+        filtering_flat = itpl(k2d_norm_flat)
+        filtering = np.reshape(filtering_flat, k2d_norm.shape)
     
-    # Check undefined filtering
-    condition = (filtering == 0)
-    filtering[condition] = 1
+        # Check undefined filtering
+        condition = (filtering == 0)
+        filtering[condition] = 1
 
-    # Deconvolution in Fourier
-    FT_map_deconv = FT_map / filtering
+        # Deconvolution in Fourier
+        FT_map_TB = FT_map_B / filtering
+        
+        # Set the zero level depending on the TF at k=0
+        FT_map_TB[condition] = 0 # keep the zero level untouched if 0 in TF
 
-    # Set the zero level depending on the TF at k=0
-    FT_map_deconv[condition] = 0 # keep the zero level untouched if 0 in TF
+    else:
+        FT_map_TB = FT_map_B*1+0
 
-    map_deconv = np.real(np.fft.ifft2(FT_map_deconv))
+    #===== Back to real space
+    map_deconv = np.real(np.fft.ifft2(FT_map_TB))
 
     return map_deconv
 
