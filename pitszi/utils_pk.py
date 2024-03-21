@@ -489,36 +489,6 @@ def multiply_Kmnmn(K, T):
     return KxT
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #==================================================
 # Measure the 3D power spectrum naively
 #==================================================
@@ -538,7 +508,8 @@ def get_pk3d(cube, proj_reso, los_reso,
     - cube (np array): 3d data cube as nd array
     - proj_reso (float): the resolution along the projected direction
     - los_reso (float) the resolution along the line of sight
-    - Nbin (int): the number of bin for output Pk
+    - Nbin (int): the number of bin for output Pk. If Nbin is None, then no 
+    binning is done
     - scalebin (str): lin or log, the way the Pk is binned along k
     - kmin/max (float): the min and max k to use in defining the bins
     - kedges (1d np array): directly provide the bin edges in a Nbin+1 array (in this case,
@@ -569,38 +540,41 @@ def get_pk3d(cube, proj_reso, los_reso,
     knrm = k3d_norm.flatten()
     fourier_pk = fourier_pk.flatten()
 
-    # Define the bins
-    if kedges is None:
-        if kmin is None:
-            kmin_sampling = np.amin(k3d_norm[k3d_norm > 0])
-        else:
-            kmin_sampling = kmin
+    #----- Case of binning
+    if Nbin is not None:
+        # Define the bins
+        if kedges is None:
+            if kmin is None:
+                kmin_sampling = np.amin(k3d_norm[k3d_norm > 0])
+            else:
+                kmin_sampling = kmin
+                
+            if kmax is None:
+                kmax_sampling = np.amax(k3d_norm)
+            else:
+                kmax_sampling = kmax
+                
+            if scalebin == 'lin':
+                kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
+            elif scalebin == 'log':
+                kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
+            else:
+                raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
             
-        if kmax is None:
-            kmax_sampling = np.amax(k3d_norm)
         else:
-            kmax_sampling = kmax
+            kbins = kedges
             
-        if scalebin == 'lin':
-            kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-        elif scalebin == 'log':
-            kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
-        else:
-            raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
+        kvals = 0.5 * (kbins[1:] + kbins[:-1])
         
-    else:
-        kbins = kedges
-        
-    kvals = 0.5 * (kbins[1:] + kbins[:-1])
+        # Bin the Pk
+        Pk_bins, _, _ = stats.binned_statistic(knrm, fourier_pk,statistic=statistic, bins=kbins)
+        Pk_bins *= (proj_reso*proj_reso*los_reso) / (Nx*Ny*Nz)
 
-    # Bin the Pk
-    Pk_bins, _, _ = stats.binned_statistic(knrm, fourier_pk,statistic=statistic, bins=kbins)
-    Pk_bins *= (proj_reso*proj_reso*los_reso) / (Nx*Ny*Nz)
-    
-    # Apply volume if needed
-    if apply_volume: 
-        Pk_bins *= 4*np.pi * (kbins[1:]**3 - kbins[:-1]**3)
-    
+    #----- Case unbinned
+    else:
+        kvals = knrm
+        Pk_bins = fourier_pk * (proj_reso*proj_reso*los_reso) / (Nx*Ny*Nz)
+
     return kvals, Pk_bins
 
 
@@ -610,8 +584,7 @@ def get_pk3d(cube, proj_reso, los_reso,
 
 def get_pk2d(image, proj_reso,
              Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
-             statistic='mean',
-             apply_volume=False):
+             statistic='mean'):
     """
     Measure the power spectrum in 2 dimensions in k bins.
     The unit of the k array is the inverse of the resolution
@@ -621,13 +594,13 @@ def get_pk2d(image, proj_reso,
     ----------
     - image (np array): 2d data cube as nd array
     - proj_reso (float): the resolution along the projected direction (any unit, e.g. kpc, arcsec)
-    - Nbin (int): the number of bin for output Pk
+    - Nbin (int): the number of bin for output Pk. If Nbin is None, then no 
+    binning is done
     - scalebin (str): lin or log, the way the Pk is binned along k
     - kmin/max (float): the min and max k to use in defining the bins
     - kedges (1d np array): directly provide the bin edges in a Nbin+1 array (in this case,
       Nbin, kmin/kmax and scalebin are ignored)
     - statistic (str or function): the statistics to be used in binned_statistic
-    - apply_volume (bool): set True to multiply each bin by 2 pi delta_k^2 volume
         
     Outputs
     ----------
@@ -651,39 +624,42 @@ def get_pk2d(image, proj_reso,
     # Get the flattened k, Pk
     knrm = k2d_norm.flatten()
     fourier_pk = fourier_pk.flatten()
-    
-    # Define the bins
-    if kedges is None:
-        if kmin is None:
-            kmin_sampling = np.amin(k2d_norm[k2d_norm > 0])
-        else:
-            kmin_sampling = kmin
-            
-        if kmax is None:
-            kmax_sampling = np.amax(k2d_norm)
-        else:
-            kmax_sampling = kmax
-            
-        if scalebin == 'lin':
-            kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-        elif scalebin == 'log':
-            kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
-        else:
-            raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
-        
-    else:
-        kbins = kedges
-        
-    kvals = 0.5 * (kbins[1:] + kbins[:-1])
 
-    # Bin the Pk
-    Pk_bins, _, _ = stats.binned_statistic(knrm, fourier_pk, statistic=statistic, bins=kbins)
-    Pk_bins *= (proj_reso*proj_reso) / (Nx*Ny) # img unit squared x reso unit squared
-    
-    # Apply volume if needed
-    if apply_volume: 
-        Pk_bins *= 2*np.pi * (kbins[1:]**2 - kbins[:-1]**2)
-    
+    #----- Case of binning
+    if Nbin is not None:
+        # Define the bins
+        if kedges is None:
+            if kmin is None:
+                kmin_sampling = np.amin(k2d_norm[k2d_norm > 0])
+            else:
+                kmin_sampling = kmin
+                
+            if kmax is None:
+                kmax_sampling = np.amax(k2d_norm)
+            else:
+                kmax_sampling = kmax
+                
+            if scalebin == 'lin':
+                kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
+            elif scalebin == 'log':
+                kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
+            else:
+                raise ValueError("Only lin or log scales are allowed. Here scalebin="+scalebin)
+            
+        else:
+            kbins = kedges
+            
+        kvals = 0.5 * (kbins[1:] + kbins[:-1])
+        
+        # Bin the Pk
+        Pk_bins, _, _ = stats.binned_statistic(knrm, fourier_pk, statistic=statistic, bins=kbins)
+        Pk_bins *= (proj_reso*proj_reso) / (Nx*Ny) # img unit squared x reso unit squared
+
+    #----- Case unbinned
+    else:
+        kvals = knrm
+        Pk_bins = fourier_pk * (proj_reso*proj_reso) / (Nx*Ny)
+
     return kvals, Pk_bins
 
 
