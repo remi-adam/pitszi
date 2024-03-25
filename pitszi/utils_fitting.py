@@ -5,6 +5,7 @@ This file contains a library of functions related to fitting and MCMC
 
 import os
 import numpy as np
+import emcee
 
 
 #==================================================

@@ -14,6 +14,8 @@ import seaborn as sns
 import pandas as pd
 import warnings
 
+from pitszi import utils
+
 
 #==================================================
 # Plot MCMC chains
@@ -85,12 +87,17 @@ def chains_1Dhist(param_chains,
     Npar = len(param_chains[0,0,:])
     for ipar in range(Npar):
         if par_best is not None:
-            par_besti = par_best[ipar]
+            par_best_i = par_best[ipar]
         else:
-            par_besti = None
+            par_best_i = None
+        if truth is not None:
+            truth_i = truth[ipar]
+        else:
+            truth_i = None
+            
         seaborn_1d(param_chains[:,:,ipar].flatten(),
                    output_fig=out_files[ipar],
-                   ci=conf/100, truth=truth[ipar], best=par_besti,
+                   ci=conf/100, truth=truth_i, best=par_best_i,
                    label=parname[ipar],
                    gridsize=100, alpha=(0.2, 0.4), 
                    figsize=(10,10), fontsize=12,
@@ -869,5 +876,145 @@ def show_fit_result_pk2d(figfile,
     plt.yscale('log')
     plt.xlim(np.amin(k2d)*0.9, np.amax(k2d)*1.1)
     plt.legend(fontsize=12)
+    plt.savefig(figfile)
+    plt.close()
+
+
+#==================================================
+# Plot of delta_y / y fitted
+#==================================================
+
+def show_fit_result_delta_ymap(figfile,
+                               image,
+                               data_image,
+                               model_ymap_sph1,
+                               model_ymap_sph2,
+                               w8,
+                               header,
+                               cmap='Spectral_r'):
+    '''
+    This function plots the best fit map model
+    
+    Parameters:
+    ----------
+    - figfile (str): name of the file to produce
+    - image (2d array): the data image
+    - header (str): the header
+    - model_ymap_sph1 (2d image): the best fit model
+    - model_ymap_sph2 (2d image): the best fit model deconvolved
+    - w8 (2d array): the weight map
+    - cmap (str): colormap
+    
+    Output:
+    -------
+    - Plots produced
+    '''
+
+    plt.rcParams.update({'font.size': 12})
+    fig = plt.figure(0, figsize=(23, 5))
+
+    # Input data
+    ax = plt.subplot(1, 4, 1, projection=WCS(header))
+    plt.imshow(image*1e5,cmap=cmap)
+    cb = plt.colorbar()
+    plt.title(r'y-Compton data ($\times 10^5$)')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel('Dec. (deg)')
+    
+    # Best model
+    ax = plt.subplot(1, 4, 2, projection=WCS(header))
+    plt.imshow(model_ymap_sph1*1e5,cmap=cmap)
+    cb = plt.colorbar()
+    plt.title(r'y-Compton best-fit ($\times 10^5$)')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel(' ')
+
+    # w8
+    ax = plt.subplot(1, 4, 3, projection=WCS(header))
+    plt.imshow(w8,cmap=cmap)
+    cb = plt.colorbar()
+    plt.title('Weight')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel(' ')
+    
+    # dy/y w8
+    ax = plt.subplot(1, 4, 4, projection=WCS(header))
+    plt.imshow(data_image, cmap=cmap)
+    cb = plt.colorbar()
+    plt.title(r'$\Delta y / y \times W$')
+    plt.xlabel('R.A. (deg)')
+    plt.ylabel(' ')
+    
+    plt.savefig(figfile)
+    plt.close()
+
+
+#==================================================
+# Plot of delta_y / y fitted
+#==================================================
+
+def show_fit_result_covariance(figfile,
+                               covmat_data,
+                               covmat_model=None):
+    '''
+    This function plots the best fit map model
+    
+    Parameters:
+    ----------
+    - figfile (str): name of the file to produce
+    - image (2d array): the data image
+    - header (str): the header
+    - model_ymap_sph1 (2d image): the best fit model
+    - model_ymap_sph2 (2d image): the best fit model deconvolved
+    - w8 (2d array): the weight map
+    - cmap (str): colormap
+    
+    Output:
+    -------
+    - Plots produced
+    '''
+
+    if covmat_model is None:
+        Nrow = 1
+    else:
+        Nrow = 2
+    
+    plt.rcParams.update({'font.size': 12})
+    fig = plt.figure(0, figsize=(12, 5*Nrow))
+
+    # Covariance data
+    ax = plt.subplot(Nrow, 2, 1)
+    plt.imshow(covmat_data)
+    cb = plt.colorbar()
+    plt.title(r'Noise covariance matrix')
+    plt.xlabel('k bin')
+    plt.ylabel('k bin')
+    
+    # Correlation data
+    ax = plt.subplot(Nrow, 2, 2)
+    plt.imshow(utils.correlation_from_covariance(covmat_data))
+    cb = plt.colorbar()
+    plt.title(r'Noise correlation matrix')
+    plt.xlabel('k bin')
+    plt.ylabel('k bin')
+
+    if covmat_model is not None:
+    
+        # Covariance model
+        ax = plt.subplot(Nrow, 2, 3)
+        plt.imshow(covmat_model)
+        cb = plt.colorbar()
+        plt.title(r'Model covariance matrix')
+        plt.xlabel('k bin')
+        plt.ylabel('k bin')
+        
+        # Correlation model
+        ax = plt.subplot(Nrow, 2, 4)
+        plt.imshow(utils.correlation_from_covariance(covmat_model))
+        cb = plt.colorbar()
+        plt.title(r'Model correlation matrix')
+        plt.xlabel('k bin')
+        plt.ylabel('k bin')
+    
     plt.savefig(figfile)
     plt.close()

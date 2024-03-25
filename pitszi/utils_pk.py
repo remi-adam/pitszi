@@ -150,7 +150,7 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
 
 
 #==================================================
-# Apply NIKA-like transfer function
+# Deconv NIKA-like transfer function
 #==================================================
 
 def deconv_transfer_function(image, reso, beamFWHM, TF, dec_TF_LS=True, dec_beam=True):
