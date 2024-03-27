@@ -493,11 +493,11 @@ def multiply_Kmnmn(K, T):
 # Measure the 3D power spectrum naively
 #==================================================
 
-def get_pk3d(cube, proj_reso, los_reso,
-             Nbin=100, scalebin='lin',
-             kmin=None, kmax=None, kedges=None,
-             statistic='mean',
-             apply_volume=False):
+def extract_pk3d(cube, proj_reso, los_reso,
+                 Nbin=100, scalebin='lin',
+                 kmin=None, kmax=None, kedges=None,
+                 statistic='mean',
+                 apply_volume=False):
     """
     Measure the power spectrum in 3 dimensions in k bins.
     The unit of the k array is the inverse of the resolution
@@ -582,9 +582,9 @@ def get_pk3d(cube, proj_reso, los_reso,
 # Measure the 3D power spectrum naively
 #==================================================
 
-def get_pk2d(image, proj_reso,
-             Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
-             statistic='mean'):
+def extract_pk2d(image, proj_reso,
+                 Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
+                 statistic='mean'):
     """
     Measure the power spectrum in 2 dimensions in k bins.
     The unit of the k array is the inverse of the resolution
@@ -667,10 +667,10 @@ def get_pk2d(image, proj_reso,
 # Measure the 3D power spectrum naively
 #==================================================
 
-def get_pk2d_arevalo(image, proj_reso,
-                     kctr=None,
-                     Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
-                     epsilon=1e-3, mask=None, unbias=False):
+def extract_pk2d_arevalo(image, proj_reso,
+                         kctr=None,
+                         Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
+                         epsilon=1e-3, mask=None, unbias=False):
     """
     Implement the method of Arevalo et al. (2012) to compute the power spectrum.
     Warning, the method is biased for steep spectra, which is the case 
@@ -785,3 +785,6 @@ def get_pk2d_arevalo(image, proj_reso,
         Pk = Pk/bias
 
     return k2d, Pk
+
+
+

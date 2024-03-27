@@ -30,6 +30,8 @@ from pitszi import utils_fitting
 from pitszi import utils_plot
 
 
+import time
+
 #==================================================
 # Likelihood: Profile parameter definition
 #==================================================
@@ -777,7 +779,8 @@ def lnlike_fluct_brute(param,
                        use_covmat=False,
                        scale_model_variance=False):
     """
-    This is the likelihood function used for the forward fit of the fluctuation spectrum.
+    This is the likelihood function used for the brute force forward 
+    fit of the fluctuation spectrum.
         
     Parameters
     ----------
@@ -821,7 +824,7 @@ def lnlike_fluct_brute(param,
     test_image = (delta_y - np.mean(delta_y))/model_ymap_sph2 * w8map
 
     #---------- Compute the test Pk
-    test_k, test_pk =  utils_pk.get_pk2d(test_image, reso_arcsec, kedges=kedges_arcsec)
+    test_k, test_pk =  utils_pk.extract_pk2d(test_image, reso_arcsec, kedges=kedges_arcsec)
     model_pk2d = test_pk + noise_ampli*noise_pk2d_mean
 
     #========== Compute the likelihood
@@ -846,6 +849,152 @@ def lnlike_fluct_brute(param,
         
     lnL += prior
 
+    #========== Check and return
+    if np.isnan(lnL):
+        return -np.inf
+    else:
+        return lnL
+    
+
+#==================================================
+# Compute the Pk2d observable for forward deprojection
+#==================================================
+
+def lnlike_model_fluct_deproj_forward(model,
+                                      k2d,
+                                      conv_2d3d,
+                                      Kmnmn,
+                                      beam_FWHM,
+                                      TF,
+                                      kedges):
+    """
+    This function compute the Pk2d model to be compared with the 
+    data in the case of forward deprojection
+        
+    Parameters
+    ----------
+    - model (pitszi Model class): the model object
+    - k2d (2d array): the k2d norm grid associated with underlying FFT sampling
+    - conv_2d3d (float): the Pk3d to Pk2d conversion in kpc-1
+    - Kmnmn (complex array): the mode mixing matrix
+    - beam_FWHM (quantity): the beam FWHM homogeneous to arcsec
+    - TF (dict): the transfer function with k (homogenous to arcsec-1) and TF keys 
+    - kedges (1d array): the bin of the k array
+
+    Outputs
+    ----------
+    - pk2d_K_bin (np array): 
+
+    """
+
+    #---------- Useful variable
+    Nx, Ny = k2d.shape
+    k2d_flat = k2d.flatten()
+    
+    #---------- Extract P3d on the k2d grid avoiding k=0
+    idx_sort = np.argsort(k2d_flat)
+    revidx   = np.argsort(idx_sort)
+    k3d_test = np.sort(k2d_flat)
+    wok = (k3d_test > 0)
+    k3d_test_clean = k3d_test[wok]
+    _, pk3d_test_clean = model.get_pressure_fluctuation_spectrum(k3d_test_clean*u.kpc**-1)
+    pk3d_test      = np.zeros(len(k3d_test))
+    pk3d_test[wok] = pk3d_test_clean.to_value('kpc3')
+    pk3d_test      = pk3d_test[revidx] # same shape as k2d_flat
+ 
+    #---------- Convert Pk3d to Pk2d
+    pk2d_flat = pk3d_test * conv_2d3d            # Unit == kpc2, 2d grid
+
+    #---------- Apply beam and transfer function
+    pk2d_flat = utils_pk.apply_pk_beam(k2d_flat, pk2d_flat, 
+                                       beam_FWHM.to_value('rad')*model.D_ang.to_value('kpc'))
+    pk2d_flat = utils_pk.apply_pk_transfer_function(k2d_flat, pk2d_flat, 
+                                                    TF['k'].to_value('rad-1')/model.D_ang.to_value('kpc'),
+                                                    TF['TF'])
+    
+    #---------- Apply Kmnmn
+    pk2d_K = np.abs(utils_pk.multiply_Kmnmn(np.abs(Kmnmn)**2, pk2d_flat.reshape(Nx, Ny))) / Nx / Ny
+
+    #---------- Bin
+    pk2d_K_bin, _, _ = stats.binned_statistic(k2d_flat, pk2d_K.flatten(), 
+                                              statistic="mean", bins=kedges)
+    
+    return pk2d_K_bin
+
+    
+#==================================================
+# lnL function for the profile file
+#==================================================
+# Must be global and here to avoid pickling errors
+global lnlike_fluct_deproj_forward
+def lnlike_fluct_deproj_forward(param,
+                                parinfo_fluct,
+                                model,
+                                conv_2d3d,
+                                Kmnmn,
+                                k2d_norm,
+                                data_pk2d,
+                                noise_pk2d_info,
+                                noise_pk2d_mean,
+                                kedges_kpc,
+                                psf_fwhm,
+                                transfer_function,
+                                parinfo_noise=None,
+                                use_covmat=False):
+    """
+    This is the likelihood function used for the deprojection forward 
+    fit of the fluctuation spectrum.
+    
+    Parameters
+    ----------
+    - param (np array): the value of the test parameters
+    - parinfo_fluct (dict): see parinfo_fluct in get_pk3d_model_forward_fitting
+    - model (class Model object): the model to be updated
+    - conv_2d3d (float): the Pk3d to Pk2d conversion in kpc-1
+    - Kmnmn (complex array): the mode mixing matrix
+    - k2d_norm (2d array): the k2d norm grid associated with underlying FFT sampling
+    - data_pk2d (1d array): the Pk extracted from the data
+    - noise_pk2d_info (2d array): the noise information. Either noise rms, or noise 
+    inverse covariance matrix depending if use_covmat is set to True
+    - noise_pk2d_mean (1d array): the mean noise bias expected
+    - kedges_kpc (1d array): the edges of the k bins in kpc-1
+    - psf_fwhm (quantity): the psf FWHM
+    - transfer_function (dict): the transfer function
+    - parinfo_noise (dict): see parinfo_noise in get_pk3d_model_forward_fitting
+    - use_covmat (bool): set to true to use the covariance matrix
+
+    Outputs
+    ----------
+    - lnL (float): the value of the log likelihood
+
+    """
+    
+    #========== Deal with flat and Gaussian priors
+    prior = lnlike_prior_fluct(param, parinfo_fluct,parinfo_noise=parinfo_noise)
+    if not np.isfinite(prior): return -np.inf
+    
+    #========== Change model parameters
+    model, noise_ampli = lnlike_setpar_fluct(param, model, parinfo_fluct,
+                                             parinfo_noise=parinfo_noise)
+    
+    #========== Get the model
+    #---------- Pressure fluctuation power spectrum
+    test_pk = lnlike_model_fluct_deproj_forward(model, k2d_norm, conv_2d3d, Kmnmn,
+                                                psf_fwhm, transfer_function, kedges_kpc)
+
+    #---------- Pk model plus noise
+    model_pk2d = test_pk + noise_ampli*noise_pk2d_mean
+    
+    #========== Compute the likelihood
+    if use_covmat: # Using the covariance matrix            
+        residual_test = model_pk2d - data_pk2d
+        lnL = -0.5*np.matmul(residual_test, np.matmul(noise_pk2d_info, residual_test))
+        
+    else: # Using the rms only
+        lnL = -0.5*np.nansum((model_pk2d - data_pk2d)**2 / noise_pk2d_info)
+        
+    lnL += prior
+    
     #========== Check and return
     if np.isnan(lnL):
         return -np.inf
@@ -983,7 +1132,7 @@ class Inference():
         self.mcmc_reset    = mcmc_reset
         self.mcmc_run      = mcmc_run
         self.mcmc_Nresamp  = mcmc_Nresamp
-
+        
 
     #==================================================
     # Print parameters
@@ -1361,7 +1510,8 @@ class Inference():
     
     def get_pk2d_noise_statistics(self,
                                   kbin_edges=None,
-                                  Nmc=1000):
+                                  Nmc=1000,
+                                  physical=False):
         """
         This function compute the noise properties associated
         with the data noise
@@ -1370,6 +1520,7 @@ class Inference():
         ----------
         - kbin_edges (1d array, quantity): array of k edges that can be used instead of default one
         - Nmc (int): number of monte carlo realization
+        - physical (bool): set to true to have output in kpc units, else arcsec units
 
         Outputs
         ----------
@@ -1392,7 +1543,13 @@ class Inference():
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges.to_value('arcsec-1')
+            try:
+                kedges = kbin_edges.to_value('arcsec-1')
+            except:
+                try:
+                    kedges = (kbin_edges.to_value('kpc-1')*self.model.D_ang.to_value('kpc')*u.rad**-1).to_value('arcsec-1')
+                except:
+                    raise ValueError('kbin_edges should be given homogeneous to kpc-1 or arcsec-1')
             
         reso = self.model.get_map_reso().to_value('arcsec')
 
@@ -1431,7 +1588,7 @@ class Inference():
                 
             # Noise to Pk
             image_noise_mc = (img_y - np.mean(img_y))/model_ymap_sph2 * self.method_w8
-            k2d, pk_mc =  utils_pk.get_pk2d(image_noise_mc, reso, kedges=kedges)
+            k2d, pk_mc =  utils_pk.extract_pk2d(image_noise_mc, reso, kedges=kedges)
             noise_pk2d_mc[imc,:] = pk_mc
             
         noise_pk2d_mean = np.mean(noise_pk2d_mc, axis=0)
@@ -1450,7 +1607,15 @@ class Inference():
                 print('Some pixels in the covariance matrix are NaN.')
             raise ValueError('Issue with noise covariance matrix')
 
-        return k2d, noise_pk2d_mean, noise_pk2d_covmat
+        #----- Units
+        if physical:
+            kpc2arcsec = ((1*u.kpc/self.model.D_ang).to_value('')*u.rad).to_value('arcsec')
+            k2d /= kpc2arcsec**-1
+            noise_pk2d_mean /= kpc2arcsec**2
+            noise_pk2d_covmat /= kpc2arcsec**4
+            return k2d*u.kpc**-1, noise_pk2d_mean*u.kpc*2, noise_pk2d_covmat*u.kpc**4
+        else:
+            return k2d*u.arcsec**-1, noise_pk2d_mean*u.arcsec**2, noise_pk2d_covmat*u.arcsec**4
 
 
     #==================================================
@@ -1459,7 +1624,8 @@ class Inference():
     
     def get_pk2d_modelvar_statistics(self,
                                      kbin_edges=None,
-                                     Nmc=1000):
+                                     Nmc=1000,
+                                     physical=False):
         """
         This function compute the model variance properties associated
         with the reference input model.
@@ -1468,6 +1634,7 @@ class Inference():
         ----------
         - kbin_edges (1d array quantity): array of k edges that can be used instead of default one
         - Nmc (int): number of monte carlo realization
+        - physical (bool): set to true to have output in kpc units, else arcsec units
 
         Outputs
         ----------
@@ -1490,7 +1657,13 @@ class Inference():
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges.to_value('arcsec-1')
+            try:
+                kedges = kbin_edges.to_value('arcsec-1')
+            except:
+                try:
+                    kedges = (kbin_edges.to_value('kpc-1')*self.model.D_ang.to_value('kpc')*u.rad**-1).to_value('arcsec-1')
+                except:
+                    raise ValueError('kbin_edges should be given homogeneous to kpc-1 or arcsec-1')
             
         reso = self.model.get_map_reso().to_value('arcsec')
 
@@ -1524,7 +1697,7 @@ class Inference():
             test_image = (delta_y - np.mean(delta_y))/model_ymap_sph2 * self.method_w8
 
             # Pk
-            k2d, pk_mc =  utils_pk.get_pk2d(test_image, reso, kedges=kedges)
+            k2d, pk_mc =  utils_pk.extract_pk2d(test_image, reso, kedges=kedges)
             model_pk2d_mc[imc,:] = pk_mc
             
         model_pk2d_mean = np.mean(model_pk2d_mc, axis=0)
@@ -1543,7 +1716,15 @@ class Inference():
                 print('This can be that the number of bins is such that some bins are empty.')
             raise ValueError('Issue with noise covariance matrix')
 
-        return k2d, model_pk2d_mean, model_pk2d_covmat
+        #----- Units
+        if physical:
+            kpc2arcsec = ((1*u.kpc/self.model.D_ang).to_value('')*u.rad).to_value('arcsec')
+            k2d /= kpc2arcsec**-1
+            model_pk2d_mean /= kpc2arcsec**2
+            model_pk2d_covmat /= kpc2arcsec**4
+            return k2d*u.kpc**-1, model_pk2d_mean*u.kpc*2, model_pk2d_covmat*u.kpc**4
+        else:
+            return k2d*u.arcsec**-1, model_pk2d_mean*u.arcsec**2, model_pk2d_covmat*u.arcsec**4
 
 
     #==================================================
@@ -1552,7 +1733,8 @@ class Inference():
     
     def get_pk2d_data(self,
                       kbin_edges=None,
-                      output_ymodel=False):
+                      output_ymodel=False,
+                      physical=False):
         """
         This function compute the data pk2d that is used for fitting
         
@@ -1560,6 +1742,7 @@ class Inference():
         ----------
         - kbin_edges (1d array quantity): array of k edges that can be used instead of default one
         - output_ymodel (bool): if true, ymap used for model are also output
+        - physical (bool): set to true to have output in kpc units, else arcsec units
 
         Outputs
         ----------
@@ -1596,24 +1779,35 @@ class Inference():
         if kbin_edges is None:
             kedges = self.get_kedges().to_value('arcsec-1')
         else:
-            kedges = kbin_edges.to_value('arcsec-1')
+            try:
+                kedges = kbin_edges.to_value('arcsec-1')
+            except:
+                try:
+                    kedges = (kbin_edges.to_value('kpc-1')*self.model.D_ang.to_value('kpc')*u.rad**-1).to_value('arcsec-1')
+                except:
+                    raise ValueError('kbin_edges should be given homogeneous to kpc-1 or arcsec-1')
             
         reso = self.model.get_map_reso().to_value('arcsec')
-        k2d, data_pk2d = utils_pk.get_pk2d(data_image, reso, kedges=kedges)
+        k2d, data_pk2d = utils_pk.extract_pk2d(data_image, reso, kedges=kedges)
+
+        #---------- Units
+        if physical:
+            kpc2arcsec = ((1*u.kpc/self.model.D_ang).to_value('')*u.rad).to_value('arcsec')
+            k2d *= kpc2arcsec**1 *u.kpc**-1
+            model_pk2d_mean *= kpc2arcsec**-2 * u.kpc**2
+            model_pk2d_covmat *= kpc2arcsec**-4 *u.kpc**4
+        else:
+            k2d *= u.arcsec**-1
+            model_pk2d_mean *= u.arcsec**2
+            model_pk2d_covmat *= u.arcsec**4
 
         #---------- return
         if output_ymodel:
             return k2d, data_pk2d, data_image, model_ymap_sph1, model_ymap_sph2
         else:
             return k2d, data_pk2d
-
-
-
         
-
-
-    
-    
+        
     #==================================================
     # Compute results for a given MCMC sampling
     #==================================================
@@ -2195,7 +2389,7 @@ class Inference():
                                           irfs_convolution_TF=self.data.transfer_function)
             delta_y = mc_ymap - model_ymap_sph1
             mc_image = (delta_y - np.mean(delta_y))/model_ymap_sph2 * self.method_w8
-            MC_pk2d[imc,:] = utils_pk.get_pk2d(mc_image, reso, kedges=kedges)[1]
+            MC_pk2d[imc,:] = utils_pk.extract_pk2d(mc_image, reso, kedges=kedges)[1]
             
             # Get MC Pk3d
             MC_pk3d[imc,:] = mc_model.get_pressure_fluctuation_spectrum()[1].to_value('kpc3')
@@ -2227,8 +2421,64 @@ class Inference():
                                         k3d, best_pk3d, MC_pk3d, true_pk3d=true_pk3d)
 
 
+
+    #==================================================
+    # Compute the Pk prediction for forward deprojection
+    #==================================================
     
-    
+    def modelpred_fluct_deproj_forward(self, physical=True):
+        """
+        This function uses the current inference and model objects state
+        to extract the model prediction for the forward deprojection model.
+        
+        Parameters
+        ----------
+        - physical (bool): set to true to have physical unit, otherwise angles.
+        
+        Outputs
+        ----------
+        - k_out (quantity array): bin center in kpc-1 or arcsec-1
+        - pk_out (quantity array): Pk in the binin kpc2 or arcsec2
+
+        """
+
+        # k information
+        _, _, k2d = self.get_k_grid(physical=True)
+        k2d = k2d.to_value('kpc-1')
+        kedges = self.get_kedges(physical=True).to_value('kpc-1')
+
+        # Compute Kmnmn
+        fft_w8 = np.fft.fftn(self.method_w8)
+        Kmnmn = utils_pk.compute_Kmnmn(fft_w8)
+
+        # Compute the conversion factor
+        ymap_wf = self.get_p3d_to_p2d_from_window_function()
+        conv = np.sum(ymap_wf*self.method_w8**2) / np.sum(self.method_w8**2)
+        conv = conv.to_value('kpc-1')
+
+        # Pk prediction
+        pk_pred = lnlike_model_fluct_deproj_forward(self.model,
+                                                    k2d,
+                                                    conv,
+                                                    Kmnmn,
+                                                    self.data.psf_fwhm,
+                                                    self.data.transfer_function,
+                                                    kedges)
+        
+        # Bin center
+        k_pred = 0.5 * (kedges[1:] + kedges[:-1])
+
+        # Unit changes
+        if physical:
+            k_out = k_pred*u.kpc**-1
+            pk_out = pk_pred*u.kpc**2
+        else:
+            k_out = ((k_pred*u.kpc**-1 * self.model.D_ang).to_value('')*u.rad**-1).to('arcsec-1')
+            pk_out = ((pk_pred*u.kpc**2 / self.model.D_ang**2).to_value('')*u.rad**2).to('arcsec2')
+
+        return k_out, pk_out
+        
+        
     #==================================================
     # Compute the Pk contraint via forward deprojection
     #==================================================
@@ -2309,43 +2559,53 @@ class Inference():
 
         #========== Binning info    
         if kbin_edges is None:
-            kedges = self.get_kedges().to_value('arcsec-1')
+            kedges = self.get_kedges(physical=True).to_value('kpc-1')
         else:
-            kedges = kbin_edges.to_value('arcsec-1')
+            kedges = kbin_edges.to_value('kpc-1')
             
-        reso = self.model.get_map_reso().to_value('arcsec')
+        k2d_norm = self.get_k_grid(physical=True)[2].to_value('kpc-1')
         
         #========== Deal with input images and Pk        
-        k2d, data_pk2d, dy_over_y, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data(kbin_edges=kbin_edges,
-                                                                                         output_ymodel=True)
+        k2d, data_pk2d  = self.get_pk2d_data(kbin_edges=kbin_edges)
         
         #========== Deal with how the noise should be accounted for
         _, noise_pk2d_ref, noise_pk2d_covmat = self.get_pk2d_noise_statistics(kbin_edges=kbin_edges, Nmc=Nmc_noise)
-        _, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_modelvar_statistics(kbin_edges=kbin_edges, Nmc=Nmc_noise)
         
+        if use_covmat:
+            noise_pk2d_info = np.linalg.inv(noise_pk2d_covmat)
+        else:
+            noise_pk2d_info = np.diag(noise_pk2d_covmat)**0.5
+
+        #========== Compute model products
+        #---------- Window function and 2D-3D conversion
+        ymap_wf = self.get_p3d_to_p2d_from_window_function()
+        conv = np.sum(ymap_wf*self.method_w8**2) / np.sum(self.method_w8**2)
+
+        #---------- Kmnmn
+        fft_w8 = np.fft.fftn(self.method_w8)
+        Kmnmn = utils_pk.compute_Kmnmn(fft_w8)
+
         #========== Define the MCMC setup
         backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
                                                      self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
-        moves = emcee.moves.KDEMove()
+        from pathos import multiprocessing as mpp
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         lnlike_fluct_deproj_forward,
                                         args=[parinfo_fluct,
                                               self.model,
-                                              model_ymap_sph1,
-                                              model_ymap_sph2,
-                                              self.method_w8,
-                                              model_pk2d_covmat,
-                                              model_pk2d_ref,
+                                              conv.to_value('kpc-1'),
+                                              Kmnmn,
+                                              k2d_norm,
                                               data_pk2d,
-                                              noise_pk2d_covmat,
+                                              noise_pk2d_info,
                                               noise_pk2d_ref,
-                                              reso, kedges,
+                                              kedges,
                                               self.data.psf_fwhm,
                                               self.data.transfer_function,
                                               parinfo_noise,
                                               use_covmat],
+                                        pool=mpp.Pool(mpp.cpu_count()),
                                         #pool=Pool(cpu_count()),
-                                        moves=moves,
                                         backend=backend)
         
         #========== Run the MCMC
@@ -2444,18 +2704,18 @@ class Inference():
             if mask is not None:
                 image = image*mask
                 
-            k2d, pk2d  = utils_pk.get_pk2d(image, proj_reso,
+            k2d, pk2d  = utils_pk.extract_pk2d(image, proj_reso,
                                         Nbin=Nbin, kmin=kmin, kmax=kmax, scalebin=scalebin, kedges=kedges,
                                         statistic=statistic)
             if mask is not None:
                 pk2d *= mask.size/np.sum(mask) # mean fsky correction
             
         elif method == 'Arevalo12':
-            k2d, pk2d  = utils_pk.get_pk2d_arevalo(image, proj_reso,
-                                                kctr=kctr,
-                                                Nbin=Nbin, scalebin=scalebin, kmin=kmin, kmax=kmax, kedges=kedges,
-                                                mask=mask,
-                                                unbias=unbias)
+            k2d, pk2d  = utils_pk.extract_pk2d_arevalo(image, proj_reso,
+                                                       kctr=kctr,
+                                                       Nbin=Nbin, scalebin=scalebin, kmin=kmin, kmax=kmax, kedges=kedges,
+                                                       mask=mask,
+                                                       unbias=unbias)
             
         else:
             raise ValueError('method can only be Naive or Arevalo12')    
@@ -2548,18 +2808,18 @@ class Inference():
 
         #----- Extract Pk
         if method_pk == 'Naive':
-            k2d, pk2d  = utils_pk.get_pk2d(image, map_reso_kpc,
+            k2d, pk2d  = utils_pk.extract_pk2d(image, map_reso_kpc,
                                         Nbin=Nbin, kmin=kmin, kmax=kmax, scalebin=scalebin, kedges=kedges,
                                         statistic=statistic)
             if mask is not None:
                 pk2d *= mask.size/np.sum(mask) # mean fsky correction
             
         elif method_pk == 'Arevalo12':
-            k2d, pk2d  = utils_pk.get_pk2d_arevalo(image, map_reso_kpc,
-                                                kctr=kctr,
-                                                Nbin=Nbin, scalebin=scalebin, kmin=kmin, kmax=kmax, kedges=kedges,
-                                                mask=mask,
-                                                unbias=unbias)
+            k2d, pk2d  = utils_pk.extract_pk2d_arevalo(image, map_reso_kpc,
+                                                       kctr=kctr,
+                                                       Nbin=Nbin, scalebin=scalebin, kmin=kmin, kmax=kmax, kedges=kedges,
+                                                       mask=mask,
+                                                       unbias=unbias)
             
         else:
             raise ValueError('method can only be Naive or Arevalo12')    
