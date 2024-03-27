@@ -13,6 +13,8 @@ from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
+from scipy.interpolate import interp1d
+from scipy.optimize import curve_fit
 import copy
 import pickle
 import pprint
@@ -63,11 +65,9 @@ class Data():
                  psf_fwhm=0*u.arcsec,
                  transfer_function=None,
                  mask=None,
-                 noise_jackknife=None,
                  noise_rms=None,
                  noise_covmat=None,
-                 noise_model_pk_center=None,
-                 noise_model_radial=None,
+                 noise_model=[None, None],
                  silent=False,
                  output_dir='./pitszi_output',
     ):
@@ -81,12 +81,11 @@ class Data():
         - psf_fwhm=0*u.arcsec,
         - transfer_function=None,
         - mask (2d np.array): mask associated with image
-        - noise_jackknife (2d np.array): jacknife map associated with image
         - noise_rms (2d np.array): rms associated with the image
         - noise_covmat (2d np.array): noise covariance matrix associated with flattened image
-        - noise_model_pk_center (function): function that give the noise Pk as a function of k in arcsec^-1
-        - noise_model_radial (function):  function that give the noise amplitude as a function of radial
-        distance from the center r in arcsec (make sense to have 1 in the center)
+        - noise_model (list of 2 function): a) function that give the noise Pk 
+        as a function of k in arcsec^-1, b) function that give the noise amplitude as a 
+        function of radial distance from the center r in arcsec
         - silent (bool)
         - output_dir (str): directory where saving outputs
 
@@ -110,7 +109,7 @@ class Data():
         else:
             self.mask = mask
 
-        # The PSF. Could be a single number, a function, a dictionary with {k, PSF}
+        # The PSF
         self.psf_fwhm = psf_fwhm
 
         # Transfer function, i.e. filtering as a function of k
@@ -121,11 +120,9 @@ class Data():
             self.transfer_function = transfer_function
 
         # Description of the noise
-        self.noise_jackknife       = noise_jackknife
-        self.noise_rms             = noise_rms
-        self.noise_covmat          = noise_covmat
-        self.noise_model_pk_center = noise_model_pk_center # output in [y] x arcsec^2
-        self.noise_model_radial    = noise_model_radial    # output unitless
+        self.noise_rms    = noise_rms
+        self.noise_covmat = noise_covmat
+        self.noise_model  = noise_model
 
 
     #==================================================
@@ -175,10 +172,10 @@ class Data():
         """
 
         # output in [y] x arcsec^2
-        self.noise_model_pk_center = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1
+        self.noise_model[0] = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1
 
         # output unitless
-        self.noise_model_radial    = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    
+        self.noise_model[1] = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    
         
         
     #==================================================
@@ -228,9 +225,9 @@ class Data():
         """
 
         # Check that the covariance exists
-        if self.noise_model_pk_center is None or self.noise_model_radial is None:
+        if None in self.noise_model:
             if not self.silent:
-                print('The noise model (noise_model_pk_center, noise_model_radial) is undefined')
+                print('The noise model [noise_model_pk_center, noise_model_radial] is undefined')
                 print('while it is requested for get_noise_monte_carlo_from_model')
             return
         
@@ -251,16 +248,16 @@ class Data():
         k2d_norm_flat = k2d_norm.flatten()
     
         # Compute Pk noise
-        P2d_k_grid = self.noise_model_pk_center(k2d_norm)
+        P2d_k_grid = self.noise_model[0](k2d_norm)
+        P2d_k_grid[P2d_k_grid<0] = 0   # Negative Pk can happen for interpolation of poorly defined models
         P2d_k_grid[k2d_norm == 0] = 0
-
+        
         amplitude =  np.sqrt(P2d_k_grid / reso_arcsec**2)
         
         noise = np.random.normal(0, 1, size=(Nmc, Nx, Ny))
         noise = np.fft.fftn(noise, axes=(1,2))
         noise = np.real(np.fft.ifftn(noise * amplitude, axes=(1,2)))
-
-    
+        
         # Account for a radial dependence
         ramap, decmap = map_tools.get_radec_map(header)
         if center is None:
@@ -270,7 +267,7 @@ class Data():
         
         dist_map = map_tools.greatcircle(ramap, decmap,
                                          center.icrs.ra.to_value('deg'), center.icrs.dec.to_value('deg'))
-        noise_radial_dep = self.noise_model_radial(dist_map*3600)
+        noise_radial_dep = self.noise_model[1](dist_map*3600)
         noise = noise * np.transpose(np.dstack([noise_radial_dep]*Nmc), axes=(2,0,1))
 
         # Remove first axis if Nmc is one
@@ -413,22 +410,68 @@ class Data():
     # Measure noise from JackKnife
     #==================================================
     
-    def set_noise_properties_from_jackknife(self):
+    def set_noise_model_from_jackknife(self,
+                                       jkmap,
+                                       normmap,
+                                       reso,
+                                       Npix_bin_rad=3,
+                                       Nbin_k=30,
+                                       scalepk='log'):
         """
-        Compute a noise MC realization from the noise covariance
-        matrix.
+        Derive the noise model from a jacknife by fitting a radial 
+        model and a k dependence model as:
+        P(k) = A + B (k/1 arcmin-1)^beta
+        Norm(r) = A + B np.exp((r_arcsec-C)/D)    
         
         Parameters
         ----------
-        - Nmc (int): the number of map to compute in the cube
-        - seed (int): the 
+        - jkmap (np array): a jack knife map
+        - normmap (np array): the normalization map. jkmap/normmap should have homogeneous noise
+        - reso (float): the map resolution in arcsec
         
         Outputs
         ----------
-        - noise (nd array): noise MC cube
+        The noise model is set from the jackknife
         """
 
+        # General info
+        Nx, Ny = jkmap.shape
+        
+        w = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
+        if not self.silent:
+            if np.sum(~w) > 0:
+                print('WARNING: some pixels are bad. This may affect the recovered noise model')
+        
+        # Build radius map
+        x = np.linspace(-(Nx-1)/2, (Nx-1)/2, Nx)*reso
+        y = np.linspace(-(Ny-1)/2, (Ny-1)/2, Ny)*reso
+        xx, yy = np.meshgrid(x, y, indexing='ij')
+        rad = np.sqrt(xx**2 + yy**2)
 
+        # Get radial profile
+        err = normmap * 0 + 1
+        err[~w] = np.nan
+        r_b, p_b, _ = map_tools.radial_profile_sb(normmap, ((Nx-1)/2,(Ny-1)/2),
+                                                  stddev=err, binsize=Npix_bin_rad)
+        r_b *= reso # in arcsec from here
+
+        # Fit the radial profile with high order polynomial
+        w = ~np.isnan(p_b)
+        prof_mod = interp1d(r_b[w], p_b[w], bounds_error=False, fill_value="extrapolate")
+
+        # Extract the normalized map
+        img = jkmap/normmap
+        img[np.isnan(err)] = 0
+        
+        # Extract and fit the Pk
+        k, pk = utils_pk.extract_pk2d(img, reso, Nbin=Nbin_k, scalebin=scalepk)
+        w = ~np.isnan(pk)
+        spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
+        
+        # Fix the model
+        self.noise_model = [lambda k_arcsec: spec_mod(k_arcsec),
+                            lambda r_arcsec: prof_mod(r_arcsec)]
+        
         
     #==================================================
     # Generate Mock data
