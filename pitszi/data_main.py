@@ -57,9 +57,15 @@ class Data():
     - get_noise_monte_carlo_from_model: compute noise monte carlo given the noise model
     - get_noise_monte_carlo_from_covariance: compute noise MC realization from the covariance matrix
     - get_noise_covariance_from_model: compute the covariance given a model
+    - get_noise_covariance_from_noise_mc: compute the covariance given a input noise MC
     - save_noise_covariance: save the covariance matrix
     - load_noise_covariance: load a pre-existing covariance matrix
     - set_noise_model_from_jackknife: use a jackknife to compute fir the noise model
+    - set_noise_model_from_mc: use noise MC to define a noise model
+    - set_noise_model_from_covariance: use noise covariance matrix to define a noise model
+    - get_noise_rms_from_mc: get the noise rms given the noise MC realizations
+    - get_noise_rms_from_covariance: get the noise rms given the noise covariance matrix
+    - get_noise_rms_from_model: get the noise rms given the noise model
     - set_image_to_mock: set the data to a mock realization given a model from Model()
 
     ToDo
@@ -142,7 +148,7 @@ class Data():
         self.noise_mc     = noise_mc
 
         # Admin
-        self.silent     = True
+        self.silent     = silent
         self.output_dir = output_dir
 
         
@@ -633,16 +639,6 @@ class Data():
         #----- Fix the model
         self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
         
-
-
-
-
-
-
-
-
-
-
         
     #==================================================
     # Get the noise rms given a noise MC
@@ -784,18 +780,23 @@ class Data():
         - use_model_header (bool): set to true to replacde data header 
         with the current model header. Otherwise the model header is 
         set to the one of the data.
-        - noise_origin (str): can be 'covariance', 'model', or 'none'
+        - noise_origin (str): can be 'covariance', 'model', 'MC', or 'none'
         - noise_center (SkyCoord): the reference center for the noise
         - model_seed (bool): set to a number for reproducible noise
 
         """
-
+        
         # copy the model so that the input is not modified
         model = copy.deepcopy(model_input)
 
         # Match the header as requested
         if use_model_header:
             self.header = model.get_map_header()
+            if not self.silent:
+                msg1 = 'WARNING: the data header is fixed to the model header.'
+                msg2 = '         This may affect consistency with other data properties (mask, noise, etc)'
+                print(msg1)
+                print(msg2)
         else:
             model.map_header = self.header
             
@@ -813,7 +814,14 @@ class Data():
         if noise_origin == 'model':
             noise_mc = self.get_noise_monte_carlo_from_model(center=noise_center, Nmc=1, seed=noise_seed)
         elif noise_origin == 'covariance':
-            noise_mc = self.get_noise_monte_carlo_from_covariance()
+            noise_mc = self.get_noise_monte_carlo_from_covariance(Nmc=1, seed=noise_seed)
+        elif noise_origin == 'MC':
+            if len(self.noise_mc.shape) == 3:
+                noise_mc = self.noise_mc[0,:,:]
+            elif len(self.noise_mc) == 2:
+                noise_mc = self.noise_mc
+            else:
+                raise ValueError('The noise_mc is not correct')
         elif noise_origin == 'none':
             noise_mc = 0
         else:
@@ -821,15 +829,7 @@ class Data():
         image_mock = convolved_model + noise_mc
 
         # Set the image and the mask if not correct anymore
-        self.image = image_mock
-        '''
-        WHAT IS DONE HERE IS REALLY NOT CLEAN. SHOULD BE IMPROVED.
-        '''        
-        if (self.mask.shape[0] != self.image.shape[0]) or (self.mask.shape[1] != self.image.shape[1]):
-            self.mask = self.image * 0 + 1
-            if not self.silent:
-                msg = 'mask set with 1 everywhere since the previous one did not match the data shape anymore'
-                print(msg)
+        self.image = image_mock     
 
         return image_mock
         
