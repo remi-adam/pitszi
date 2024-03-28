@@ -14,7 +14,6 @@ from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
 from scipy.interpolate import interp1d
-from scipy.optimize import curve_fit
 import copy
 import pickle
 import pprint
@@ -38,20 +37,36 @@ class Data():
     - mask (2d array): the mask associated with the image data
     - psf_fwhm (quantity): the FWHM of the PSF as a quantity homogeneous to arcsec
     - transfer_function (dict): the transfer function as {'k':k*u.arcsec, 'TF':TF}
-    - jackknife (2d array): a representative jacknife map associated with the data
-    - noise_covariance (2d array): the covariance matrix associated with the noise
+    - noise_rms (2d np.array): rms associated with the image
+    - noise_covmat (2d np.array): noise covariance matrix associated with flattened image
+    - noise_model (list of 2 element): 
+        b) returns the noise amplitude as a function of position. This can be a map, or a 
+           function that depends on radius from the center in arcsec.
+        a) function that give the noise power spectrum, once normalized by its amplitude,
+           as a function of k in arcsec^-1
+    - noise_mc (3d np array): Monte Carlo noise realizations
     - silent (bool): set to True to give information
+    - output_dir (str): directory where saving outputs
 
     Methods
     ----------
+    - print_param: print the current Data parameters
+    - set_nika2_reference_noise_model: set the noise model to a baseline
     - set_nika2_reference_tf: set the transfer fucntion to a NIKA2 reference model
-    - get_noise_monte_carlo_from_model: compute noise monte carlo given noise model
-    - set_image_to_mock: set the data to a mock realization given the model
+    - get_noise_monte_carlo_from_model: compute noise monte carlo given the noise model
+    - get_noise_monte_carlo_from_covariance: compute noise MC realization from the covariance matrix
+    - get_noise_covariance_from_model: compute the covariance given a model
+    - save_noise_covariance: save the covariance matrix
+    - load_noise_covariance: load a pre-existing covariance matrix
+    - set_noise_model_from_jackknife: use a jackknife to compute fir the noise model
+    - set_image_to_mock: set the data to a mock realization given a model from Model()
 
     ToDo
     ----------
-    - compute noise monte carlo from covariance matrix
-    - extract noise model from jackknife map
+    - Add functions to degrade / reproject the data while dealing 
+    with power spectrum properties
+    - Add checks of the data format, consistency, type etc (e.g. header agree with data shape, 
+    loaded covriance agrees with data shape, etc)
 
     """
 
@@ -62,12 +77,13 @@ class Data():
     def __init__(self,
                  image,
                  header,
+                 mask=None,
                  psf_fwhm=0*u.arcsec,
                  transfer_function=None,
-                 mask=None,
                  noise_rms=None,
                  noise_covmat=None,
-                 noise_model=[None, None],
+                 noise_model=None,
+                 noise_mc=None,
                  silent=False,
                  output_dir='./pitszi_output',
     ):
@@ -78,24 +94,23 @@ class Data():
         ----------
         - image (2d np.array): data
         - header (str): header of the data
-        - psf_fwhm=0*u.arcsec,
-        - transfer_function=None,
         - mask (2d np.array): mask associated with image
+        - psf_fwhm (quantity): the FWHM of the PSF as a quantity homogeneous to arcsec
+        - transfer_function (dict): the transfer function as {'k':k*u.arcsec, 'TF':TF}
         - noise_rms (2d np.array): rms associated with the image
         - noise_covmat (2d np.array): noise covariance matrix associated with flattened image
-        - noise_model (list of 2 function): a) function that give the noise Pk 
-        as a function of k in arcsec^-1, b) function that give the noise amplitude as a 
-        function of radial distance from the center r in arcsec
-        - silent (bool)
+        - noise_model (list of 2 element): 
+          b) returns the noise amplitude as a function of position. This can be a map, or a 
+             function that depends on radius from the center in arcsec.
+          a) function that give the noise power spectrum, once normalized by its amplitude,
+             as a function of k in arcsec^-1
+        - noise_mc (3d np array): Monte Carlo noise realizations
+        - silent (bool): set to true to avoid printing information
         - output_dir (str): directory where saving outputs
 
         """
-
-        kref = np.linspace(0, 1, 1000)*u.arcsec**-1
         
-        # Admin
-        self.silent     = True
-        self.output_dir = output_dir
+        kref = np.linspace(0, 1, 1000)*u.arcsec**-1
         
         # Image data as a 2D np array, in Compton parameter unit
         self.image = image
@@ -123,8 +138,13 @@ class Data():
         self.noise_rms    = noise_rms
         self.noise_covmat = noise_covmat
         self.noise_model  = noise_model
+        self.noise_mc     = noise_mc
 
+        # Admin
+        self.silent     = True
+        self.output_dir = output_dir
 
+        
     #==================================================
     # Print parameters
     #==================================================
@@ -170,12 +190,12 @@ class Data():
         ----------
         
         """
-
-        # output in [y] x arcsec^2
-        self.noise_model[0] = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1
-
+        
         # output unitless
-        self.noise_model[1] = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)    
+        self.noise_model[0] = lambda r_arcsec: 1 + np.exp((r_arcsec-200)/80)
+        
+        # output in [y] x arcsec^2
+        self.noise_model[1] = lambda k_arcsec: 5e-9 + 15e-9 * (k_arcsec*60)**-1
         
         
     #==================================================
@@ -224,13 +244,14 @@ class Data():
 
         """
 
-        # Check that the covariance exists
-        if None in self.noise_model:
+        # Check that the model was filled
+        if type(self.noise_model) != list:
             if not self.silent:
-                print('The noise model [noise_model_pk_center, noise_model_radial] is undefined')
-                print('while it is requested for get_noise_monte_carlo_from_model')
+                print('The noise model [noise_model_radial, noise_model_pk] should be a list')
+                print('Cannot run get_noise_monte_carlo_from_model.')
             return
-        
+
+        #---------- Dependence in terms of k
         # Set a seed
         np.random.seed(seed)
 
@@ -248,29 +269,42 @@ class Data():
         k2d_norm_flat = k2d_norm.flatten()
     
         # Compute Pk noise
-        P2d_k_grid = self.noise_model[0](k2d_norm)
-        P2d_k_grid[P2d_k_grid<0] = 0   # Negative Pk can happen for interpolation of poorly defined models
+        P2d_k_grid = self.noise_model[1](k2d_norm)
+
+        # Clean Pk
+        wneg = P2d_k_grid < 0
+        P2d_k_grid[wneg] = 0   # Negative Pk can happen for interpolation of poorly defined models
+        if np.sum(wneg)>0 and not self.silent:
+            print('----- The Pk noise model function implies some Pk<0. These points are set to 0.')
         P2d_k_grid[k2d_norm == 0] = 0
-        
+
+        # Generate the normalized noise
         amplitude =  np.sqrt(P2d_k_grid / reso_arcsec**2)
-        
         noise = np.random.normal(0, 1, size=(Nmc, Nx, Ny))
         noise = np.fft.fftn(noise, axes=(1,2))
         noise = np.real(np.fft.ifftn(noise * amplitude, axes=(1,2)))
-        
-        # Account for a radial dependence
-        ramap, decmap = map_tools.get_radec_map(header)
-        if center is None:
-            RA0 = np.mean(ramap)
-            Dec0 = np.mean(decmap)
-            center = SkyCoord(RA0*u.deg, Dec0*u.deg, frame="icrs")
-        
-        dist_map = map_tools.greatcircle(ramap, decmap,
-                                         center.icrs.ra.to_value('deg'), center.icrs.dec.to_value('deg'))
-        noise_radial_dep = self.noise_model[1](dist_map*3600)
-        noise = noise * np.transpose(np.dstack([noise_radial_dep]*Nmc), axes=(2,0,1))
 
-        # Remove first axis if Nmc is one
+        #---------- Account for a radial dependence
+        # Case of a function of radius
+        if type(self.noise_model[0]) == type(lambda x: 1):
+            ramap, decmap = map_tools.get_radec_map(header)
+            if center is None:
+                RA0 = np.mean(ramap)
+                Dec0 = np.mean(decmap)
+                center = SkyCoord(RA0*u.deg, Dec0*u.deg, frame="icrs")
+            
+            dist_map = map_tools.greatcircle(ramap, decmap,
+                                             center.icrs.ra.to_value('deg'), center.icrs.dec.to_value('deg'))
+            noise_radial_dep = self.noise_model[0](dist_map*3600)
+            noise = noise * np.transpose(np.dstack([noise_radial_dep]*Nmc), axes=(2,0,1))
+
+        # Case of a map
+        if type(self.noise_model[0]) == type(self.image):
+            if self.noise_model[0].shape != (Nx, Ny):
+                raise ValueError('The radial dependence of the model (a map) does not match the data shape')
+            noise = noise * np.transpose(np.dstack([self.noise_model[0]]*Nmc), axes=(2,0,1))
+        
+        #---------- Remove first axis if Nmc is one
         if Nmc == 1:
             noise = noise[0]
         
@@ -326,12 +360,12 @@ class Data():
     # Set the noise covariance from MC realizations
     #==================================================
 
-    def set_noise_covariance_from_model(self,
+    def get_noise_covariance_from_model(self,
                                         center=None,
                                         Nmc=1000,
                                         seed=None):
         """
-        Set the noise covariance from the noise model
+        Get the noise covariance from the noise model
         
         Parameters
         ----------
@@ -357,8 +391,6 @@ class Data():
             mflat = noise_mc[i,:,:].flatten()
             covmat += np.matmul(mflat[:,None], mflat[None,:])
         covmat /= Nmc
-
-        self.noise_covmat = covmat
 
         return covmat
     
@@ -401,9 +433,9 @@ class Data():
         """
         
         with open(self.output_dir+'/data_noise_covariance_matrix.pkl', 'rb') as pfile:
-            par = pickle.load(pfile)
+            cov = pickle.load(pfile)
             
-        self.noise_covmat = par
+        self.noise_covmat = cov
     
 
     #==================================================
@@ -414,20 +446,19 @@ class Data():
                                        jkmap,
                                        normmap,
                                        reso,
-                                       Npix_bin_rad=3,
-                                       Nbin_k=30,
-                                       scalepk='log'):
+                                       Nbin=30,
+                                       scale='log'):
         """
-        Derive the noise model from a jacknife by fitting a radial 
-        model and a k dependence model as:
-        P(k) = A + B (k/1 arcmin-1)^beta
-        Norm(r) = A + B np.exp((r_arcsec-C)/D)    
+        Derive the noise model from a jacknife interpolating 
+        the power spectrum of the homogeneized image.
         
         Parameters
         ----------
         - jkmap (np array): a jack knife map
         - normmap (np array): the normalization map. jkmap/normmap should have homogeneous noise
         - reso (float): the map resolution in arcsec
+        - Nbin (int): number of bin for the Pk
+        - scale (str): log or lin, to define the scale used in Pk
         
         Outputs
         ----------
@@ -442,35 +473,17 @@ class Data():
             if np.sum(~w) > 0:
                 print('WARNING: some pixels are bad. This may affect the recovered noise model')
         
-        # Build radius map
-        x = np.linspace(-(Nx-1)/2, (Nx-1)/2, Nx)*reso
-        y = np.linspace(-(Ny-1)/2, (Ny-1)/2, Ny)*reso
-        xx, yy = np.meshgrid(x, y, indexing='ij')
-        rad = np.sqrt(xx**2 + yy**2)
-
-        # Get radial profile
-        err = normmap * 0 + 1
-        err[~w] = np.nan
-        r_b, p_b, _ = map_tools.radial_profile_sb(normmap, ((Nx-1)/2,(Ny-1)/2),
-                                                  stddev=err, binsize=Npix_bin_rad)
-        r_b *= reso # in arcsec from here
-
-        # Fit the radial profile with high order polynomial
-        w = ~np.isnan(p_b)
-        prof_mod = interp1d(r_b[w], p_b[w], bounds_error=False, fill_value="extrapolate")
-
         # Extract the normalized map
         img = jkmap/normmap
-        img[np.isnan(err)] = 0
+        img[~w] = 0
         
         # Extract and fit the Pk
-        k, pk = utils_pk.extract_pk2d(img, reso, Nbin=Nbin_k, scalebin=scalepk)
+        k, pk = utils_pk.extract_pk2d(img, reso, Nbin=Nbin, scalebin=scale)
         w = ~np.isnan(pk)
         spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
         
         # Fix the model
-        self.noise_model = [lambda k_arcsec: spec_mod(k_arcsec),
-                            lambda r_arcsec: prof_mod(r_arcsec)]
+        self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
         
         
     #==================================================
