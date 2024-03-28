@@ -14,6 +14,7 @@ from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter
 import copy
 import pickle
 import pprint
@@ -44,7 +45,7 @@ class Data():
            function that depends on radius from the center in arcsec.
         a) function that give the noise power spectrum, once normalized by its amplitude,
            as a function of k in arcsec^-1
-    - noise_mc (3d np array): Monte Carlo noise realizations
+    - noise_mc (3d np array): Monte Carlo noise realizations. Shape = (Nmc, Nx, Ny)
     - silent (bool): set to True to give information
     - output_dir (str): directory where saving outputs
 
@@ -334,10 +335,7 @@ class Data():
 
         # Check that the covariance exists
         if self.noise_covmat is None:
-            if not self.silent:
-                print('The noise covariance matrix is undefined')
-                print('while it is requested for get_noise_monte_carlo_from_covariance')
-            return
+            raise ValueError('The noise covariance matrix is undefined, but needed here')
 
         # Set a seed
         np.random.seed(seed)
@@ -357,7 +355,7 @@ class Data():
 
     
     #==================================================
-    # Set the noise covariance from MC realizations
+    # Get the noise covariance from model MC realizations
     #==================================================
 
     def get_noise_covariance_from_model(self,
@@ -393,7 +391,43 @@ class Data():
         covmat /= Nmc
 
         return covmat
-    
+
+
+    #==================================================
+    # Get the noise covariance from user MC realizations
+    #==================================================
+
+    def get_noise_covariance_from_noise_mc(self):
+        """
+        Get the noise covariance from the noise MC realizations
+        
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - covmat (nd array): the noise covariance matrix
+
+        """
+
+        if self.noise_mc is None:
+            raise ValueError('The noise_mc was not definied, but it is required for getting the covariance here')
+        
+        if not self.silent:
+            print('Start computing the covariance matrix from MC simulations')
+            print('This can take significant time')
+            
+        noise_mc = self.noise_mc
+        Nmc = noise_mc.shape[0]
+        
+        covmat = 0
+        for i in range(Nmc):
+            mflat = noise_mc[i,:,:].flatten()
+            covmat += np.matmul(mflat[:,None], mflat[None,:])
+        covmat /= Nmc
+
+        return covmat
+
 
     #==================================================
     # Save the noise covariance matrix
@@ -485,7 +519,248 @@ class Data():
         # Fix the model
         self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
         
+
+    #==================================================
+    # Set noise model from MC
+    #==================================================
+    
+    def set_noise_model_from_mc(self,
+                                Nbin=30,
+                                scale='log'):
+        """
+        Derive the noise model by interpolating the noise PK from MC realizations
+        after homogeneizing the noise.
         
+        Parameters
+        ----------
+        - Nbin (int): number of bin for the Pk
+        - scale (str): log or lin, to define the scale used in Pk
+        
+        Outputs
+        ----------
+        The noise model is set from the MC
+        """
+
+        #----- Sanity check
+        if self.noise_mc is None:
+            raise ValueError('The noise_mc should be defined for this function')
+        
+        #----- General info
+        Nmc, Nx, Ny = self.noise_mc.shape
+        if Nmc < 2: raise ValueError('The number of MC should be large, at least larger than 1.')
+        reso = np.abs(self.header['CDELT1'])*3600
+        normmap = np.std(self.noise_mc, axis=0)
+        
+        w = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
+        if not self.silent:
+            if np.sum(~w) > 0:
+                print('WARNING: some pixels are bad. This may affect the recovered noise model')
+        
+        #----- Extract the pk for each normalized MC
+        pk_mc = np.zeros((Nmc,Nbin))
+        for i in range(Nmc):
+            img = self.noise_mc[i,:,:] / normmap
+            img[~w] = 0
+        
+            k, pk_i = utils_pk.extract_pk2d(img, reso, Nbin=Nbin, scalebin=scale)
+            pk_mc[i, :] += pk_i
+
+        pk = np.mean(pk_mc, axis=0)
+            
+        w = ~np.isnan(pk)
+        spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
+        
+        #----- Fix the model
+        self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
+        
+
+
+    #==================================================
+    # Set noise model from MC
+    #==================================================
+    
+    def set_noise_model_from_covariance(self,
+                                        Nmc=1000,
+                                        Nbin=30,
+                                        scale='log'):
+        """
+        Derive the noise model by interpolating the noise PK from MC realizations
+        after homogeneizing the noise, derive from the covariance matrix
+        
+        Parameters
+        ----------
+        - Nmc (int): number of MC to do
+        - Nbin (int): number of bin for the Pk
+        - scale (str): log or lin, to define the scale used in Pk
+        
+        Outputs
+        ----------
+        The noise model is set from the MC
+        """
+
+        #----- Sanity check
+        if self.noise_covmat is None:
+            raise ValueError('The noise_covmat should be defined for this function')
+
+        #----- Get the noise MC
+        noise_mc = self.get_noise_monte_carlo_from_covariance(Nmc=Nmc)
+        
+        #----- General info
+        Nmc, Nx, Ny = noise_mc.shape
+        if Nmc < 2: raise ValueError('The number of MC should be large, at least larger than 1.')
+        reso = np.abs(self.header['CDELT1'])*3600
+        normmap = np.std(noise_mc, axis=0)
+        
+        w = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
+        if not self.silent:
+            if np.sum(~w) > 0:
+                print('WARNING: some pixels are bad. This may affect the recovered noise model')
+        
+        #----- Extract the pk for each normalized MC
+        pk_mc = np.zeros((Nmc,Nbin))
+        for i in range(Nmc):
+            img = noise_mc[i,:,:] / normmap
+            img[~w] = 0
+        
+            k, pk_i = utils_pk.extract_pk2d(img, reso, Nbin=Nbin, scalebin=scale)
+            pk_mc[i, :] += pk_i
+
+        pk = np.mean(pk_mc, axis=0)
+            
+        w = ~np.isnan(pk)
+        spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
+        
+        #----- Fix the model
+        self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
+        
+
+
+
+
+
+
+
+
+
+
+        
+    #==================================================
+    # Get the noise rms given a noise MC
+    #==================================================
+    
+    def get_noise_rms_from_mc(self,
+                              smooth_fwhm=0*u.arcsec):
+        """
+        Compute the noise rms from given noise MC
+        
+        Parameters
+        ----------
+        - smooth_fwhm (quantity): the gaussian FWHM to smooth the MC prior rms 
+
+        Outputs
+        ----------
+        - rms (np array): The noise rms
+        """
+        
+        #----- First get noise MC
+        noise_mc = copy.copy(self.noise_mc)
+
+        #----- Have the possibility to smooth the noise MC
+        if smooth_fwhm>0:
+            sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+            reso = np.abs(self.header['CDELT1'])
+            sigma = smooth_fwhm.to_value('deg')/sigma2fwhm/reso
+            noise_mc = gaussian_filter(noise_mc, sigma=[0,sigma,sigma])
+        
+        #----- Compute the rms
+        rms = np.std(noise_mc, axis=0)
+        
+        #----- Get the rms
+        return rms
+        
+
+    #==================================================
+    # Get the noise rms given a noise MC
+    #==================================================
+    
+    def get_noise_rms_from_covariance(self,
+                                 Nmc=1000,
+                                 smooth_fwhm=0*u.arcsec,
+                                 noise_seed=None):
+        """
+        Compute the noise rms from the covariance matrix
+        
+        Parameters
+        ----------
+        - Nmc (int): number of MC to do
+        - smooth_fwhm (quantity): the gaussian FWHM to smooth the MC prior rms 
+        - noise_seed (int): the numpy random seed for reproducible results
+
+        Outputs
+        ----------
+        - rms (np array): The noise rms
+        """
+        
+        #----- First get noise MC
+        noise_mc = self.get_noise_monte_carlo_from_covariance(Nmc=Nmc, seed=noise_seed)
+
+        #----- Have the possibility to smooth the noise MC
+        if smooth_fwhm>0:
+            sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+            reso = np.abs(self.header['CDELT1'])
+            sigma = smooth_fwhm.to_value('deg')/sigma2fwhm/reso
+            noise_mc = gaussian_filter(noise_mc, sigma=[0,sigma,sigma])
+        
+        #----- Compute the rms
+        rms = np.std(noise_mc, axis=0)
+        
+        #----- Get the rms
+        return rms
+    
+
+    #==================================================
+    # Get the noise rms given a model
+    #==================================================
+    
+    def get_noise_rms_from_model(self,
+                                 Nmc=1000,
+                                 smooth_fwhm=0*u.arcsec,
+                                 center=None,
+                                 noise_seed=None):
+        """
+        Compute the noise rms from the noise model
+        
+        Parameters
+        ----------
+        - Nmc (int): number of MC to do
+        - smooth_fwhm (quantity): the gaussian FWHM to smooth the MC prior rms 
+        - center (SkyCoord): the reference center for the noise
+        - noise_seed (int): the numpy random seed for reproducible results
+        
+        Outputs
+        ----------
+        - rms (np array): The noise rms
+        """
+        
+        #----- First get noise MC
+        noise_mc = self.get_noise_monte_carlo_from_model(center=center,
+                                                         Nmc=Nmc,
+                                                         seed=noise_seed)
+
+        #----- Have the possibility to smooth the noise MC
+        if smooth_fwhm>0:
+            sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+            reso = np.abs(self.header['CDELT1'])
+            sigma = smooth_fwhm.to_value('deg')/sigma2fwhm/reso
+            noise_mc = gaussian_filter(noise_mc, sigma=[0,sigma,sigma])
+        
+        #----- Compute the rms
+        rms = np.std(noise_mc, axis=0)
+        
+        #----- Get the rms
+        return rms
+
+    
     #==================================================
     # Generate Mock data
     #==================================================
@@ -547,10 +822,14 @@ class Data():
 
         # Set the image and the mask if not correct anymore
         self.image = image_mock
+        '''
+        WHAT IS DONE HERE IS REALLY NOT CLEAN. SHOULD BE IMPROVED.
+        '''        
         if (self.mask.shape[0] != self.image.shape[0]) or (self.mask.shape[1] != self.image.shape[1]):
             self.mask = self.image * 0 + 1
             if not self.silent:
-                print('A new mask is set with 1 everywhere since the previous one did not match the data shape anymore')
+                msg = 'mask set with 1 everywhere since the previous one did not match the data shape anymore'
+                print(msg)
 
         return image_mock
         
