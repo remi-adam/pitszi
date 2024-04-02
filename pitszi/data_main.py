@@ -439,20 +439,26 @@ class Data():
     # Save the noise covariance matrix
     #==================================================
     
-    def save_noise_covariance(self):
+    def save_noise_covariance(self, filename=None):
         """
         Save the noise covariance matrix to avoid long
         computation time
         
         Parameters
         ----------
+        - filename (str): full path to the covariance matrix file
         
         Outputs
         ----------
         - file is saved
         """
+
+        if filename is None:
+            myfilename = self.output_dir+'/data_image_noise_covariance_matrix.pkl'
+        else:
+            myfilename = filename
         
-        with open(self.output_dir+'/data_noise_covariance_matrix.pkl', 'wb') as pfile:
+        with open(myfilename, 'wb') as pfile:
             pickle.dump(self.noise_covmat, pfile, pickle.HIGHEST_PROTOCOL)
 
 
@@ -460,19 +466,25 @@ class Data():
     # Read saved noise covariance matrix
     #==================================================
     
-    def load_noise_covariance(self):
+    def load_noise_covariance(self, filename=None):
         """
         Read the noise covariance matrix
         
         Parameters
         ----------
+        - filename (str): full path to the covariance matrix file
         
         Outputs
         ----------
         
         """
-        
-        with open(self.output_dir+'/data_noise_covariance_matrix.pkl', 'rb') as pfile:
+
+        if filename is None:
+            myfilename = self.output_dir+'/data_image_noise_covariance_matrix.pkl'
+        else:
+            myfilename = filename
+            
+        with open(myfilename, 'rb') as pfile:
             cov = pickle.load(pfile)
             
         self.noise_covmat = cov
