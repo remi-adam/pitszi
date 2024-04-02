@@ -15,12 +15,12 @@ from minot.ClusterTools import cluster_profile
 
 
 #==================================================
-# Admin class
+# Library class
 #==================================================
 
 class ModelLibrary(object):
     """ ModelAdmin class
-    This class searves as a parser to the main Cluster class, to
+    This class searves as a parser to the main Model class, to
     include the subclass ModelAdmin in this other file. All the definitions of the
     model parameters should be here.
 
@@ -28,7 +28,7 @@ class ModelLibrary(object):
 
     Attributes
     ----------
-    The attributes are the same as the Cluster class, see model.py
+    The attributes are the same as the Model class, see model_main.py
 
     Methods
     ----------
