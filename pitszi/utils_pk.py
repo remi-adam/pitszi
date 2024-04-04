@@ -484,9 +484,34 @@ def multiply_Kmnmn(K, T):
     
     for n in range(Ny):
         for m in range(Nx):
-            KxT[m, n] = np.sum(K[m, n, :, :] * T) / Nx/Ny
+            KxT[m, n] = np.sum(K[m, n, :, :] * T) 
         
-    return KxT
+    return KxT / Nx/Ny
+
+
+def multiply_Kmnmn_bis(K, T):
+    """
+    Same as multiply_Kmnmn but avoid loop.
+    Application of K onto 2D power spectra T.
+    Eq. A.5 from Ponthieu+2011
+
+    Parameters
+    ----------
+    - K (complex 2d array): output of 'compute_Kmnmn'
+    - T (2d array): the input model for the power spectrum on a 2d grid
+
+    Outputs
+    ----------
+    - KxT (np 2D array): the power spectrum in 2D convolved with K
+
+    """
+
+    Nx, Ny = T.shape
+    KxT = np.zeros((Nx, Ny), dtype=complex)  # m,n
+    T_reshaped = np.tile(T, (Nx, Ny, 1, 1))
+    KxT = np.sum(K * T_reshaped, axis=(2, 3))
+        
+    return KxT / Nx/Ny
 
 
 #==================================================

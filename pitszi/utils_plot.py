@@ -45,13 +45,21 @@ def chains_1Dplots(param_chains,
     # Chains
     fig, axes = plt.subplots(Npar, figsize=(8, 2*Npar), sharex=True)
     for i in range(Npar):
-        ax = axes[i]
+        if Npar>1:
+            ax = axes[i]
+        else:
+            ax = axes
+            
         for j in range(Nchain):
             ax.plot(param_chains[j, :, i], alpha=0.5)
         ax.set_xlim(0, len(param_chains[0,:,0]))
         ax.set_ylabel(parname[i])
         ax.grid()
-    axes[-1].set_xlabel("step number")
+    if Npar>1:
+        axes[-1].set_xlabel("step number")
+    else:
+        axes.set_xlabel("step number")
+        
     fig.savefig(output_file)
     plt.close()
 
@@ -82,7 +90,7 @@ def chains_1Dhist(param_chains,
     Plots are saved in the output file
 
     """
-
+    
     Nbin_hist = 40
     Npar = len(param_chains[0,0,:])
     for ipar in range(Npar):
@@ -189,8 +197,14 @@ def chains_2Dplots_sns(param_chains,
     Nchain = len(param_chains[:,0,0])
     par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
 
+    # Correct scale to have numbers ~1
+    power = np.round(np.log10(np.abs(np.mean(par_flat,axis=0))))
+    par_flat_scale = par_flat * 10**-power[np.newaxis,:]
+    parname_scale = []
+    for i in range(len(parname)): parname_scale.append('$10^{'+str(int(-power[i]))+'} '+parname[i]+'$')
+    
     # Corner plot using seaborn
-    df = pd.DataFrame(par_flat, columns=parname)
+    df = pd.DataFrame(par_flat_scale, columns=parname_scale)
     seaborn_corner(df, output_fig=out_file,
                    n_levels=15, cols=[('royalblue', 'k', 'grey', 'Blues')], 
                    ci2d=[0.68, 0.95],

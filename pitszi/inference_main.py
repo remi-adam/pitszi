@@ -7,6 +7,7 @@ It is dedicated to extract constraints on model parameters.
 # Requested imports
 #==================================================
 
+import os
 import numpy as np
 import astropy.units as u
 import astropy.constants as cst
@@ -14,6 +15,8 @@ from scipy.ndimage import gaussian_filter
 import scipy.stats as stats
 import pprint
 import copy
+import pickle
+import dill
 
 from pitszi import utils
 from pitszi import utils_pk
@@ -70,7 +73,7 @@ class Inference(InferenceFitting):
         - _reso_kpc (float): the map resolution in kpc
         - _kpc2arcsec (float): the conversion from kpc to arcsec
         - _Kmnmn (nd complex array): the mode mixing matrix
-        - _image (2d array): the image used for Pk calculation
+        - _dy_image (2d array): the image used for Pk calculation
         - _ymap_sph1 (2d array): the smooth ymap model (numerator)
         - _ymap_sph2 (2d array): the smooth ymap model (denominator)
         - _conv_wf (2d array): the pk3d to pk2d conversion window function
@@ -128,11 +131,11 @@ class Inference(InferenceFitting):
                  kbin_scale='lin',
                  #
                  method_use_covmat=False,
-                 method_parallel=True,
+                 method_parallel=False,
                  method_data_deconv=False,
                  method_w8=None,
                  #
-                 mcmc_nwalkers=100,
+                 mcmc_nwalkers=20,
                  mcmc_nsteps=500,
                  mcmc_burnin=100,
                  mcmc_reset=False,
@@ -243,9 +246,10 @@ class Inference(InferenceFitting):
         self._reso_kpc        = None
         self._kpc2arcsec      = None
         self._Kmnmn           = None
-        self._image           = None
+        self._dy_image        = None
         self._ymap_sph1       = None
         self._ymap_sph2       = None
+        self._ymap_invcovmat  = None
         self._conv_wf         = None
         self._conv_pk2d3d     = None
         self._k2d_norm        = None
@@ -260,7 +264,6 @@ class Inference(InferenceFitting):
         self._pk2d_noise_cov  = None
         self._pk2d_modref     = None
         self._pk2d_modref_rms = None
-        self._pk2d_modref_cov = None
 
         
     #==================================================
@@ -294,6 +297,64 @@ class Inference(InferenceFitting):
             print(('    '+str(par[keys[k]])))
             print(('    '+str(type(par[keys[k]]))+''))
         print('=====================================================')
+
+
+    #==================================================
+    # Save parameters
+    #==================================================
+    
+    def save_inference(self):
+        """
+        Save the current inference object.
+        
+        Parameters
+        ----------
+            
+        Outputs
+        ----------
+        The parameters are saved in the output directory
+
+        """
+
+        # Create the output directory if needed
+        if not os.path.exists(self.output_dir): os.mkdir(self.output_dir)
+
+        # Save
+        with open(self.output_dir+'/inference_parameters.pkl', 'wb') as pfile:
+            #pickle.dump(self.__dict__, pfile, pickle.HIGHEST_PROTOCOL)
+            dill.dump(self.__dict__, pfile)
+
+        # Text file for user
+        par = self.__dict__
+        keys = list(par.keys())
+        with open(self.output_dir+'/inference_parameters.txt', 'w') as txtfile:
+            for k in range(len(keys)):
+                txtfile.write('--- '+(keys[k])+'\n')
+                txtfile.write('    '+str(par[keys[k]])+'\n')
+                txtfile.write('    '+str(type(par[keys[k]]))+'\n')
+
+                
+    #==================================================
+    # Load parameters
+    #==================================================
+    
+    def load_inference(self, param_file):
+        """
+        Read the a given parameter file to re-initialize the inference object.
+        
+        Parameters
+        ----------
+        param_file (str): the parameter file to be read
+            
+        Outputs
+        ----------
+            
+        """
+
+        with open(param_file, 'rb') as pfile:
+            par = dill.load(pfile)
+            
+        self.__dict__ = par
         
         
     #==================================================
@@ -318,7 +379,7 @@ class Inference(InferenceFitting):
             print('----- Running the setup -----')
             if self._setup_done :
                 print('      - The setup was already done. It will be overwritten.')
-        
+
         #---------- General
         self._reso_arcsec = self.model.get_map_reso(physical=False).to_value('arcsec')
         self._reso_kpc    = self.model.get_map_reso(physical=True).to_value('kpc')
@@ -327,12 +388,13 @@ class Inference(InferenceFitting):
         #---------- ymaps
         if not self.silent: print('    * Setup imaging')
 
-        data_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image()
+        dy_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image()
         
         self._ymap_sph1 = model_ymap_sph1
         self._ymap_sph2 = model_ymap_sph2
-        self._image     = data_image
-
+        self._dy_image  = dy_image
+        if self.method_use_covmat: self._ymap_invcovmat = np.linalg.pinv(self.data.noise_covmat)
+                
         #---------- Binning
         if not self.silent: print('    * Setup k binning')
 
@@ -593,14 +655,14 @@ class Inference(InferenceFitting):
         This function compute the image used in the Pk analysis, 
         and also returns the smooth ymaps used in the ratio:
 
-        data_image = (y - model_ymap_sph1) / model_ymap_sph2
+        dy_image = (y - model_ymap_sph1) / model_ymap_sph2
         
         Parameters
         ----------
         
         Outputs
         ----------
-        - data_image (2d array): image use for Pk analysis
+        - dy_image (2d array): image use for Pk analysis
         - model_ymap_sph1 (2d array): smooth model numerator
         - model_ymap_sph2 (2d array): smooth model denominator
 
@@ -626,9 +688,9 @@ class Inference(InferenceFitting):
         
         #---------- Compute the data to be used for Pk
         delta_y    = img_y - model_ymap_sph1
-        data_image = (delta_y - np.mean(delta_y)) / model_ymap_sph2 * self.method_w8
+        dy_image = (delta_y - np.mean(delta_y)) / model_ymap_sph2 * self.method_w8
         
-        return data_image, model_ymap_sph1, model_ymap_sph2
+        return dy_image, model_ymap_sph1, model_ymap_sph2
     
     
     #==================================================
@@ -652,12 +714,12 @@ class Inference(InferenceFitting):
         """
 
         #---------- Compute the data to be used for Pk
-        data_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image() 
+        dy_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image() 
         
         #---------- Pk for the data
         kedges = self.get_kedges().to_value('arcsec-1')
         reso   = self.model.get_map_reso().to_value('arcsec')
-        k2d, data_pk2d = utils_pk.extract_pk2d(data_image, reso, kedges=kedges)
+        k2d, data_pk2d = utils_pk.extract_pk2d(dy_image, reso, kedges=kedges)
 
         #---------- Units
         if physical:
@@ -950,7 +1012,7 @@ class Inference(InferenceFitting):
         pk2d_flat = utils_pk.apply_pk_beam(k2d_flat, pk2d_flat, beam)
         pk2d_flat = utils_pk.apply_pk_transfer_function(k2d_flat, pk2d_flat, TF_k, TF_tf)
     
-        # Apply Kmn
+        # Apply Kmn (multiply_Kmnmn_bis, i.e. without loop, is slower)
         pk2d_K = np.abs(utils_pk.multiply_Kmnmn(np.abs(self._Kmnmn)**2,
                                                 pk2d_flat.reshape(Nx, Ny))) / Nx / Ny
 
