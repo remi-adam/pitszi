@@ -608,6 +608,9 @@ class InferenceFitting(object):
             print(ndim)
             print('      - Parallel mode:                ')
             print(self.method_parallel)
+            print('      - Use covariance matrix?        ')
+            print(self.method_use_covmat)
+            print('-----')
             
         #========== Define the MCMC setup
         backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,

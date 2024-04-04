@@ -174,7 +174,6 @@ class Inference(InferenceFitting):
         *** From binning/mask/etc ***
         - Sharp mask/weights: very sharp mask or weighting may introduce issues.
         
-        
         Parameters
         ----------
         - data (pitszi Class Data object): the data
