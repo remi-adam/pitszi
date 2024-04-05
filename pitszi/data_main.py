@@ -524,7 +524,7 @@ class Data():
         w2 = (jkmap != 0) * ~np.isnan(jkmap) * ~np.isinf(jkmap)
         fsky = np.sum(~(w1*w2)) / Nx / Ny
         if not self.silent:
-            if np.sum(~w1) > 0 or if np.sum(~w2) > 0:
+            if np.sum(~w1) > 0 or np.sum(~w2) > 0:
                 print('WARNING: some pixels are bad (fsky='+str(fsky)+'). This may affect the recovered noise model')
                 
         # Extract the normalized map
