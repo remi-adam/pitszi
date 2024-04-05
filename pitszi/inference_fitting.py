@@ -402,7 +402,7 @@ class InferenceFitting(object):
         Parameters
         ----------
         - param (list): the parameter to apply to the model
-        - parinfo (dict): see fit_profile_mcmc
+        - parinfo (dict): see mcmc_profile
 
         Outputs
         ----------
@@ -480,19 +480,17 @@ class InferenceFitting(object):
 
         
     #==================================================
-    # lnL function for the profile file
+    # lnL function for the profile fit
     #==================================================
     
-    def lnlike_profile(self,
-                       param,
-                       parinfo):
+    def lnlike_profile(self, param, parinfo):
         """
         This is the likelihood function used for the fit of the profile.
             
         Parameters
         ----------
         - param (np array): the value of the test parameters
-        - parinfo (dict): see parinfo in fit_profile_mcmc
+        - parinfo (dict): see parinfo in mcmc_profile
 
         Outputs
         ----------
@@ -513,7 +511,7 @@ class InferenceFitting(object):
         #========== Compute the likelihood
         if self.method_use_covmat:
             flat_resid = (self.data.mask * (model_img - self.data.image)).flatten()
-            lnL = -0.5*np.matmul(flat_resid, np.matmul(self._ymap_invcovmat, flat_resid))
+            lnL = -0.5*np.matmul(flat_resid, np.matmul(self._ymap_invcov, flat_resid))
         else:
             lnL = -0.5*np.nansum(self.data.mask**2 * (model_img-self.data.image)**2 / self.data.noise_rms**2)
             
@@ -530,8 +528,7 @@ class InferenceFitting(object):
     # Compute the smooth model via forward fitting
     #==================================================
     
-    def fit_profile_mcmc(self,
-                         parinfo,
+    def run_mcmc_profile(self, parinfo,
                          filename_sampler=None,
                          show_fit_result=False):
         """
@@ -540,9 +537,9 @@ class InferenceFitting(object):
         
         Parameters
         ----------
-        - parinfo_profile (dictionary): the model parameters associated with 
+        - parinfo (dictionary): the model parameters associated with 
         self.model.model_pressure_profile to be fit as, e.g., 
-        parinfo_prof = {'P_0':                   # --> Parameter key (mandatory)
+        parinfo =      {'P_0':                   # --> Parameter key (mandatory)
                         {'guess':[0.01, 0.001],  # --> initial guess: center, uncertainty (mandatory)
                          'unit': u.keV*u.cm**-3, # --> unit (mandatory, None if unitless)
                          'limit':[0, np.inf],    # --> Allowed range, i.e. flat prior (optional)
@@ -554,11 +551,8 @@ class InferenceFitting(object):
                           'unit': u.kpc, 
                         },
                        }    
-        - parinfo_center (dictionary): same as parinfo_profile with accepted parameters
-        'RA' and 'Dec'
-        - parinfo_ellipticity (dictionary): same as parinfo_profile with accepted parameters
-        'min_to_maj_axis_ratio' and 'angle'
-        - parinfo_ZL (dictionary): same as parinfo_profile with accepted parameter 'ZL'
+        Other accepted parameters: 'RA' and 'Dec', 'min_to_maj_axis_ratio' and 'angle', 'ZL'
+        - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): show the best fit model and residual.
 
         Outputs
@@ -592,6 +586,7 @@ class InferenceFitting(object):
         else:
             mypool = None
             
+        # Info
         if not self.silent:
             print('----- Fit parameters information -----')
             print('      - Fitted parameters:            ')
@@ -635,7 +630,7 @@ class InferenceFitting(object):
         #========== Show results
         if show_fit_result:
             self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Profile')
-            self.fit_profile_mcmc_results(sampler, parinfo)
+            self.mcmc_profile_results(sampler, parinfo)
 
         #========== Compute the best-fit model and set it
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
@@ -648,9 +643,7 @@ class InferenceFitting(object):
     # Show the fit results related to profile
     #==================================================
     
-    def fit_profile_mcmc_results(self,
-                                 sampler,
-                                 parinfo,
+    def run_mcmc_profile_results(self, sampler, parinfo,
                                  visu_smooth=10*u.arcsec,
                                  binsize_prof=5*u.arcsec,
                                  true_pressure_profile=None,
@@ -661,13 +654,13 @@ class InferenceFitting(object):
             
         Parameters
         ----------
-        - sampler (emcee object): the sampler obtained from fit_profile_mcmc
-        - parinfo (dict): same as fit_profile_mcmc
+        - sampler (emcee object): the sampler obtained from mcmc_profile
+        - parinfo (dict): same as mcmc_profile
         - visu_smooth (quantity): The extra smoothing FWHM for vidualization. Homogeneous to arcsec.
         - binsize_prof (quantity): The binsize for the y profile. Homogeneous to arcsec
         - true_pressure_profile (dict): pass a dictionary containing the profile to compare with
         in the form {'r':array in kpc, 'p':array in keV cm-3}
-        - true_y_profile (dict): pass a dictionary containing the profile to compare with
+        - true_compton_profile (dict): pass a dictionary containing the profile to compare with
         in the form {'r':array in arcmin, 'y':array in [y]}
         
         Outputs
@@ -768,5 +761,520 @@ class InferenceFitting(object):
         utils_plot.show_fit_result_pressure_profile(self.output_dir+'/MCMC_radial_results_P_profile.pdf',
                                                     r3d, best_pressure_profile, MC_pressure_profile,
                                                     true_pressure_profile=true_pressure_profile)
+
         
+    #==================================================
+    # Fluctuation parameter definition
+    #==================================================
+        
+    def defpar_fluctuation(self, parinfo):
+        """
+        This function helps defining the parameter list, initial values and
+        ranges for the fluctuation fitting.
+        We distinguish two kind of parameters:
+        - fluctuation parameters
+        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+            
+        Parameters
+        ----------
+        - parinfo_fluct (dict): see parinfo_fluct in get_pk3d_model_forward_fitting
     
+        Outputs
+        ----------
+        - par_list (list): list of parameter names
+        - par0_value (list): list of mean initial parameter value
+        - par0_err (list): list of mean initial parameter uncertainty
+        - par_min (list): list of minimal initial parameter value
+        - par_max (list): list of maximal initial parameter value
+    
+        """
+        
+        parkeys = list(parinfo.keys())
+        
+        #========== Init the parameters
+        par_list = []
+        par0_value = []
+        par0_err = []
+        par_min = []
+        par_max = []
+
+        #========== Check the fluctuation parameters
+        # remove unwanted keys
+        parinfo_fluct = copy.deepcopy(parinfo)
+        if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+        
+        # Loop over the keys
+        Npar_fluct = len(list(parinfo_fluct.keys()))
+        for ipar in range(Npar_fluct):
+            
+            parkey = list(parinfo_fluct.keys())[ipar]
+
+            #----- Check that parameters are working
+            try:
+                bid = self.model.model_pressure_fluctuation[parkey]
+            except:
+                raise ValueError('The parameter '+parkey+' is not in self.model.model_pressure_fluctuation')    
+            
+            if 'guess' not in parinfo_fluct[parkey]:
+                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
+            if 'unit' not in parinfo_fluct[parkey]:
+                raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
+    
+            #----- Update the name list
+            par_list.append(parkey)
+    
+            #----- Update the guess values
+            par0_value.append(parinfo_fluct[parkey]['guess'][0])
+            par0_err.append(parinfo_fluct[parkey]['guess'][1])
+    
+            #----- Update the limit values
+            if 'limit' in parinfo_fluct[parkey]:
+                par_min.append(parinfo_fluct[parkey]['limit'][0])
+                par_max.append(parinfo_fluct[parkey]['limit'][1])
+            else:
+                par_min.append(-np.inf)
+                par_max.append(+np.inf)
+
+        #========== Noise ampli
+        list_nuisance_allowed = ['Anoise']
+        parinfo_nuisance = {key: parinfo[key] for key in list_nuisance_allowed if key in parinfo.keys()}
+        Npar_nuisance = len(list(parinfo_nuisance.keys()))
+    
+        for ipar in range(Npar_nuisance):
+    
+            parkey = list(parinfo_nuisance.keys())[ipar]
+    
+            #----- Check that the param is ok wrt the model
+            if 'guess' not in parinfo_nuisance[parkey]:
+                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
+            if 'unit' not in parinfo_nuisance[parkey]:
+                raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
+    
+            #----- Update the name list
+            par_list.append(parkey)
+    
+            #----- Update the guess values
+            par0_value.append(parinfo_nuisance[parkey]['guess'][0])
+            par0_err.append(parinfo_nuisance[parkey]['guess'][1])
+    
+            #----- Update the limit values
+            if 'limit' in parinfo_nuisance[parkey]:
+                par_min.append(parinfo_nuisance[parkey]['limit'][0])
+                par_max.append(parinfo_nuisance[parkey]['limit'][1])
+            else:
+                par_min.append(-np.inf)
+                par_max.append(+np.inf)
+    
+        #========== Make it an np array
+        par_list   = np.array(par_list)
+        par0_value = np.array(par0_value)
+        par0_err   = np.array(par0_err)
+        par_min    = np.array(par_min)
+        par_max    = np.array(par_max)
+    
+        return par_list, par0_value, par0_err, par_min, par_max
+
+
+    #==================================================
+    # Fluctuation prior definition
+    #==================================================
+        
+    def prior_fluctuation(self, param, parinfo):
+        """
+        Compute the prior given the input parameter and some information
+        about the parameters given by the user
+        We distinguish two kind of parameters:
+        - fluctuation parameters
+        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+            
+         Parameters
+         ----------
+         - param (list): the parameter to apply to the model
+         - parinfo (dict): fluctuation parameter information
+     
+         Outputs
+         ----------
+         - prior (float): value of the prior
+
+        """
+        
+        prior = 0
+        idx_par = 0
+        parkeys = list(parinfo.keys())
+
+        #========== Check the fluctuation parameters
+        # remove unwanted keys
+        parinfo_fluct = copy.deepcopy(parinfo)
+        if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+
+        # Loop over the keys
+        parkeys_fluct = list(parinfo_fluct.keys())
+
+        for ipar in range(len(parkeys_fluct)):
+            parkey = parkeys_fluct[ipar]
+        
+            # Flat prior
+            if 'limit' in parinfo_fluct[parkey]:
+                if param[idx_par] < parinfo_fluct[parkey]['limit'][0]:
+                    return -np.inf                
+                if param[idx_par] > parinfo_fluct[parkey]['limit'][1]:
+                    return -np.inf
+                
+            # Gaussian prior
+            if 'prior' in parinfo_fluct[parkey]:
+                expected = parinfo_fluct[parkey]['prior'][0]
+                sigma = parinfo_fluct[parkey]['prior'][1]
+                prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
+    
+            # Increase param index
+            idx_par += 1
+
+        #========== Other parameters
+        list_allowed  = ['Anoise']
+        parinfo_other = {key: parinfo[key] for key in list_allowed if key in parinfo.keys()}        
+        parkeys_other = list(parinfo_other.keys())
+        Npar_other    = len(parkeys_other)
+
+        for ipar in range(Npar_other):
+            parkey = parkeys_other[ipar]
+            
+            # Flat prior
+            if 'limit' in parinfo_other[parkey]:
+                if param[idx_par] < parinfo_other[parkey]['limit'][0]:
+                    return -np.inf                
+                if param[idx_par] > parinfo_other[parkey]['limit'][1]:
+                    return -np.inf
+                
+            # Gaussian prior
+            if 'prior' in parinfo_other[parkey]:
+                expected = parinfo_other[parkey]['prior'][0]
+                sigma = parinfo_other[parkey]['prior'][1]
+                prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
+     
+            # Increase param index
+            idx_par += 1
+
+        #========== Check on param numbers
+        if idx_par != len(param):
+            raise ValueError('Problem with the prior parameters')
+
+        return prior
+    
+    
+    #==================================================
+    # Set model with fluctuation parameter value
+    #==================================================
+        
+    def setpar_fluctuation(self, param, parinfo):
+        """
+        Set the model to the given fluctuation parameters
+        We distinguish two kind of parameters:
+        - fluctuation parameters
+        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+            
+        Parameters
+        ----------
+        - param (list): the parameters to apply to the model
+        - parinfo (dict): see mcmc_fluctuation
+    
+        Outputs
+        ----------
+        The model is updated
+        
+        """
+
+        idx_par = 0
+        parkeys = list(parinfo.keys())
+
+        #========== Check the fluctuation parameters
+        # remove unwanted keys
+        parinfo_fluct = copy.deepcopy(parinfo)
+        if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+        parkeys_fluct = list(parinfo_fluct.keys())
+
+        # Loop Profile
+        for ipar in range(len(parkeys_fluct)):
+            parkey = parkeys_fluct[ipar]
+            if parinfo_fluct[parkey]['unit'] is not None:
+                unit = parinfo_fluct[parkey]['unit']
+            else:
+                unit = 1
+            self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
+            idx_par += 1
+
+        #========== Noise amplitude
+        if 'Anoise' in parkeys:
+            self.nuisance_Anoise = param[idx_par]
+            idx_par += 1
+
+        #========== Final check on parameter count
+        if len(param) != idx_par:
+            print('issue with the number of parameters')
+            import pdb
+            pdb.set_trace()
+
+
+    #==================================================
+    # lnL function for the profile fit
+    #==================================================
+    
+    def lnlike_fluctuation(self, param, parinfo, kind='projection'):
+        """
+        This is the likelihood function used for the fit of the fluctuation.
+            
+        Parameters
+        ----------
+        - param (np array): the value of the test parameters
+        - parinfo (dict): see parinfo in mcmc_fluctuation
+        - kind (str): projection or brute, for using 
+        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+
+        Outputs
+        ----------
+        - lnL (float): the value of the log likelihood
+    
+        """
+        
+        #========== Deal with flat and Gaussian priors
+        prior = self.prior_fluctuation(param, parinfo)
+        if not np.isfinite(prior): return -np.inf
+        
+        #========== Change model parameters
+        self.setpar_fluctuation(param, parinfo)
+        
+        #========== Get the model
+        if kind == 'brute':
+            pk2d_test = self.get_pk2d_model_brute(physical=True, seed=None)[1].to_value('kpc2')
+        if kind == 'projection':
+            pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
+        else:
+            raise ValueError('lnlike_fluctuation only accepts kind="brute" or kind="projection".')
+            
+        #========== Compute the likelihood
+        # collect products
+        residual_test = self._pk2d_data - pk2d_test
+        
+        if self.method_use_covmat:
+            if kind == 'brute':      inverse_cov = self._pk2d_totref_invcov
+            if kind == 'projection': inverse_cov = self._pk2d_noise_invcov
+        else:
+            if kind == 'brute':      variance = self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2
+            if kind == 'projection': variance = self._pk2d_noise_rms**2
+        
+        # compute lnL
+        if self.method_use_covmat:
+            lnL = -0.5*np.matmul(residual_test, np.matmul(inverse_cov, residual_test))
+        else:
+            lnL = -0.5*np.nansum(residual_test**2 / variance)
+            
+        lnL += prior
+        
+        #========== Check and return
+        if np.isnan(lnL):
+            return -np.inf
+        else:
+            return lnL        
+
+        
+    #==================================================
+    # Compute the Pk contraint via forward deprojection
+    #==================================================
+    
+    def run_mcmc_fluctuation(self, parinfo,
+                             kind='projection',
+                             filename_sampler=None,
+                             show_fit_result=False):
+        """
+        This function fits the 3d power spectrum
+        using a forward modeling approach via deprojection
+        
+        Parameters
+        ----------
+        - parinfo_fluct (dictionary): the model parameters associated with 
+        self.model.model_pressure_fluctuation to be fit as, e.g., 
+        parinfo      = {'Norm':                     # --> Parameter key (mandatory)
+                        {'guess':[0.5, 0.3],        # --> initial guess: center, uncertainty (mandatory)
+                         'unit': None,              # --> unit (mandatory, None if unitless)
+                         'limit':[0, np.inf],       # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[0.5, 0.1],        # --> Gaussian prior: mean, sigma (optional)
+                        },
+                        'slope':
+                        {'limit':[-11/3-1, -11/3+1], 
+                          'unit': None, 
+                        },
+                        'L_inj':
+                        {'limit':[0, 10], 
+                          'unit': u.Mpc, 
+                        },
+                       }  
+        Other accepted parameters: 'Anoise'
+
+        - kind (str): projection or brute, for using 
+        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+        - filename_sampler (str): the file name of the sampler to use.
+        - show_fit_result (bool): set to true to produce plots for fitting results
+        
+        Outputs
+        ----------
+        - parlist (list): the list of the fit parameters
+        - sampler (emcee object): the sampler associated with model parameters of
+        the smooth component
+        """
+
+
+        #========== Check if the MCMC sampler was already recorded
+        if filename_sampler is None:
+            sampler_file = self.output_dir+'/pitszi_MCMC_fluctuation_sampler.h5'
+        else:
+            sampler_file = filename_sampler
+            
+        sampler_exist = utils_fitting.check_sampler_exist(sampler_file, silent=False)
+
+        #========== Defines the fit parameters
+        # Fit parameter list and information
+        par_list, par0_value, par0_err, par_min, par_max = self.defpar_fluctuation(parinfo)
+        ndim = len(par0_value)
+        
+        # Starting points of the chains
+        pos = utils_fitting.emcee_starting_point(par0_value, par0_err, par_min, par_max, self.mcmc_nwalkers)
+        if sampler_exist and (not self.mcmc_reset): pos = None
+
+        # Parallel mode
+        if self.method_parallel:
+            mypool = ProcessPool()
+        else:
+            mypool = None
+
+        # Info
+        if not self.silent:
+            print('----- Fit parameters information -----')
+            print('      - Fitted parameters:            ')
+            print(par_list)
+            print('      - Starting point mean:          ')
+            print(par0_value)
+            print('      - Starting point dispersion :   ')
+            print(par0_err)
+            print('      - Minimal starting point:       ')
+            print(par_min)
+            print('      - Maximal starting point:       ')
+            print(par_max)
+            print('      - Number of dimensions:         ')
+            print(ndim)
+            print('      - Parallel mode:                ')
+            print(self.method_parallel)
+            print('      - Use covariance matrix?        ')
+            print(self.method_use_covmat)
+            print('-----')
+
+        #========== Define the MCMC setup
+        backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
+                                                     self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
+
+        if kind == 'projection': moves = emcee.moves.StretchMove(a=2.0)
+        if kind == 'brute':      moves = emcee.moves.KDEMove()
+
+        sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
+                                        self.lnlike_fluctuation, 
+                                        args=[parinfo, kind], 
+                                        pool=mypool,
+                                        moves=moves,
+                                        backend=backend)
+        
+        #========== Run the MCMC
+        if not self.silent: print('----- MCMC sampling -----')
+        if self.mcmc_run:
+            if not self.silent: print('      - Runing '+str(self.mcmc_nsteps)+' MCMC steps')
+            res = sampler.run_mcmc(pos, self.mcmc_nsteps, progress=True, store=True)
+        else:
+            if not self.silent: print('      - Not running, but restoring the existing sampler')
+        
+        #========== Show results
+        if show_fit_result:
+            self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Fluctuation')
+            self.run_mcmc_fluctuation_results(sampler, parinfo)
+
+        #========== Compute the best-fit model and set it
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        self.setpar_fluctuation(best_par, parinfo)
+        
+        return par_list, sampler
+
+
+    #==================================================
+    # Show the fit results related to fluctuation
+    #==================================================
+    
+    def run_mcmc_fluctuation_results(self, sampler, parinfo,
+                                     true_pk3d=None):
+        """
+        This is function is used to show the results of the MCMC
+        regarding the radial fluctuation
+            
+        Parameters
+        ----------
+        - sampler (emcee object): the sampler obtained from mcmc_profile
+        - parinfo (dict): same as mcmc_profile
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        
+        Outputs
+        ----------
+        plots are produced
+
+        """
+
+
+        #========== Get the best-fit
+        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+        self.setpar_fluctuation(best_par, parinfo)
+        k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
+
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
+        
+        #========== Get the MC
+        MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
+        MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        
+        MC_pars = utils_fitting.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
+        for imc in range(self.mcmc_Nresamp):
+            # Get MC model
+            self.setpar_fluctuation(MC_pars[imc,:], parinfo)
+
+            # Get MC noise
+            MC_pk2d_noise[imc,:] = self.nuisance_Anoise * self._pk2d_noise
+
+            # Get MC Pk2d
+            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - MC_pk2d_noise[imc,:]
+            
+            # Get MC Pk3d
+            MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
+
+        #========== Plot the fitted image data
+        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/MCMC_fluctuation_results_input_image.pdf',
+                                              self.data.image,
+                                              self._dy_image,
+                                              self._ymap_sph1,
+                                              self._ymap_sph2,
+                                              self.method_w8,
+                                              self.data.header)
+        
+        #========== Plot the covariance matrix
+        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_fluctuation_results_covariance.pdf',
+                                              self._pk2d_noise_cov,
+                                              self._pk2d_modref_cov)
+        
+        #========== Plot the Pk2d constraint
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_fluctuation_results_pk2d.pdf',
+                                        self._kctr_kpc, self._pk2d_data,
+                                        model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
+                                        self._pk2d_noise_rms,
+                                        MC_pk2d, MC_pk2d_noise)
+        
+        #========== Plot the Pk3d constraint
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_fluctuation_results_pk3d.pdf',
+                                        k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
+                                        MC_pk3d,
+                                        true_pk3d=true_pk3d)
+        
+

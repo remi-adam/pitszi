@@ -240,29 +240,37 @@ class Inference(InferenceFitting):
         self.output_dir = output_dir
         
         # Useful hiden parameters
-        self._setup_done      = False
-        self._reso_arcsec     = None
-        self._reso_kpc        = None
-        self._kpc2arcsec      = None
-        self._Kmnmn           = None
-        self._dy_image        = None
-        self._ymap_sph1       = None
-        self._ymap_sph2       = None
-        self._ymap_invcovmat  = None
-        self._conv_wf         = None
-        self._conv_pk2d3d     = None
-        self._k2d_norm        = None
-        self._kedges_kpc      = None
-        self._kedges_arcsec   = None
-        self._kctr_kpc        = None
-        self._kctr_arcsec     = None
-        self._kcount          = None
-        self._pk2d_data       = None
-        self._pk2d_noise      = None
-        self._pk2d_noise_rms  = None
-        self._pk2d_noise_cov  = None
-        self._pk2d_modref     = None
-        self._pk2d_modref_rms = None
+        self._setup_done         = False
+        
+        self._reso_arcsec        = None
+        self._reso_kpc           = None
+        self._kpc2arcsec         = None
+        
+        self._Kmnmn              = None
+        
+        self._dy_image           = None
+        self._ymap_sph1          = None
+        self._ymap_sph2          = None
+        self._ymap_invcov        = None
+        
+        self._conv_wf            = None
+        self._conv_pk2d3d        = None
+        
+        self._k2d_norm           = None
+        self._kedges_kpc         = None
+        self._kedges_arcsec      = None
+        self._kctr_kpc           = None
+        self._kctr_arcsec        = None
+        self._kcount             = None
+        
+        self._pk2d_data          = None
+        self._pk2d_noise         = None
+        self._pk2d_noise_rms     = None
+        self._pk2d_noise_cov     = None
+        self._pk2d_noise_invcov  = None
+        self._pk2d_modref        = None
+        self._pk2d_modref_rms    = None
+        self._pk2d_totref_invcov = None
 
         
     #==================================================
@@ -392,7 +400,8 @@ class Inference(InferenceFitting):
         self._ymap_sph1 = model_ymap_sph1
         self._ymap_sph2 = model_ymap_sph2
         self._dy_image  = dy_image
-        if self.method_use_covmat: self._ymap_invcovmat = np.linalg.pinv(self.data.noise_covmat)
+        if self.method_use_covmat:
+            self._ymap_invcov = np.linalg.inv(self.data.noise_covmat)
                 
         #---------- Binning
         if not self.silent: print('    * Setup k binning')
@@ -417,13 +426,19 @@ class Inference(InferenceFitting):
         _, noise_mean, noise_cov = self.get_pk2d_noise_statistics(physical=True)
         _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True)
 
-        self._pk2d_data       = self.get_pk2d_data(physical=True)[1].to_value('kpc2')
-        self._pk2d_noise      = noise_mean.to_value('kpc2')
-        self._pk2d_noise_rms  = np.diag(noise_cov.to_value('kpc4'))**0.5
-        self._pk2d_noise_cov  = noise_cov.to_value('kpc4')
-        self._pk2d_modref     = model_mean.to_value('kpc2')
-        self._pk2d_modref_rms = np.diag(model_cov.to_value('kpc4'))**0.5
-        self._pk2d_modref_cov = model_cov.to_value('kpc4')
+        self._pk2d_data          = self.get_pk2d_data(physical=True)[1].to_value('kpc2')
+        self._pk2d_noise         = noise_mean.to_value('kpc2')
+        self._pk2d_noise_rms     = np.diag(noise_cov.to_value('kpc4'))**0.5
+        self._pk2d_noise_cov     = noise_cov.to_value('kpc4')
+        if self.method_use_covmat:
+            self._pk2d_noise_invcov = np.linalg.inv(noise_cov.to_value('kpc4'))
+        
+        self._pk2d_modref        = model_mean.to_value('kpc2')
+        self._pk2d_modref_rms    = np.diag(model_cov.to_value('kpc4'))**0.5
+        self._pk2d_modref_cov    = model_cov.to_value('kpc4')
+
+        if self.method_use_covmat:
+            self._pk2d_totref_invcov = np.linalg.inv(noise_cov.to_value('kpc4') + model_cov.to_value('kpc4'))
 
         #---------- Convertion
         if not self.silent: print('    * Setup window function conversion')
