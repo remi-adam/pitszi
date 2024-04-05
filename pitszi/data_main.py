@@ -520,17 +520,20 @@ class Data():
         # General info
         Nx, Ny = jkmap.shape
         
-        w = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
+        w1 = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
+        w2 = (jkmap != 0) * ~np.isnan(jkmap) * ~np.isinf(jkmap)
+        fsky = np.sum(~(w1*w2)) / Nx / Ny
         if not self.silent:
-            if np.sum(~w) > 0:
-                print('WARNING: some pixels are bad. This may affect the recovered noise model')
-        
+            if np.sum(~w1) > 0 or if np.sum(~w2) > 0:
+                print('WARNING: some pixels are bad (fsky='+str(fsky)+'). This may affect the recovered noise model')
+                
         # Extract the normalized map
         img = jkmap/normmap
-        img[~w] = 0
+        img[~(w1*w2)] = 0
         
         # Extract and fit the Pk
         k, pk = utils_pk.extract_pk2d(img, reso, Nbin=Nbin, scalebin=scale)
+        pk = pk / fsky
         w = ~np.isnan(pk)
         spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
         
