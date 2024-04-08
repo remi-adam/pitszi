@@ -772,8 +772,7 @@ def show_fit_result_pk3d(figfile,
     ci = 68.0
     
     #----- Compute model uncertainties
-    pk3d_perc = np.percentile(pk3d_mc,
-                              (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
+    pk3d_perc = np.percentile(pk3d_mc, (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
 
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})

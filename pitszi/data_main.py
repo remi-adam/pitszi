@@ -290,7 +290,7 @@ class Data():
         noise = np.random.normal(0, 1, size=(Nmc, Nx, Ny))
         noise = np.fft.fftn(noise, axes=(1,2))
         noise = np.real(np.fft.ifftn(noise * amplitude, axes=(1,2)))
-
+        
         #---------- Account for a radial dependence
         # Case of a function of radius
         if type(self.noise_model[0]) == type(lambda x: 1):
@@ -310,7 +310,11 @@ class Data():
             if self.noise_model[0].shape != (Nx, Ny):
                 raise ValueError('The radial dependence of the model (a map) does not match the data shape')
             noise = noise * np.transpose(np.dstack([self.noise_model[0]]*Nmc), axes=(2,0,1))
-        
+
+        # Clean noise in case
+        wbad = np.isnan(noise) * np.isinf(noise)
+        noise[wbad] = np.nan
+
         #---------- Remove first axis if Nmc is one
         if Nmc == 1:
             noise = noise[0]
@@ -498,11 +502,16 @@ class Data():
                                        jkmap,
                                        normmap,
                                        reso,
-                                       Nbin=30,
-                                       scale='log'):
+                                       Nbin=20,
+                                       scale='log',
+                                       show=False):
         """
-        Derive the noise model from a jacknife interpolating 
-        the power spectrum of the homogeneized image.
+        Useful function to derive the noise model from a jacknife by
+        interpolating the power spectrum of the homogeneized image.
+        The validity of the output noise model need to be checked though.
+        In particular, this assumes the power spectrum to be the same 
+        over the whole map once normalization is applied. Unwanted 
+        interpolation effect may also appear.
         
         Parameters
         ----------
@@ -511,18 +520,19 @@ class Data():
         - reso (float): the map resolution in arcsec
         - Nbin (int): number of bin for the Pk
         - scale (str): log or lin, to define the scale used in Pk
-        
+        - show (bool): check what is done with plots
+
         Outputs
         ----------
         The noise model is set from the jackknife
         """
-
+        
         # General info
         Nx, Ny = jkmap.shape
         
         w1 = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
         w2 = (jkmap != 0) * ~np.isnan(jkmap) * ~np.isinf(jkmap)
-        fsky = np.sum(~(w1*w2)) / Nx / Ny
+        fsky = np.sum((w1*w2)) / Nx / Ny
         if not self.silent:
             if np.sum(~w1) > 0 or np.sum(~w2) > 0:
                 print('WARNING: some pixels are bad (fsky='+str(fsky)+'). This may affect the recovered noise model')
@@ -535,10 +545,37 @@ class Data():
         k, pk = utils_pk.extract_pk2d(img, reso, Nbin=Nbin, scalebin=scale)
         pk = pk / fsky
         w = ~np.isnan(pk)
-        spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
-        
+        #spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
+        spec_mod = interp1d(np.log10(k[w]), np.log10(pk[w]), bounds_error=False, fill_value="extrapolate", kind='linear')
+
+        # Show
+        if show:
+            import matplotlib.pyplot as plt
+
+            plt.figure(1)
+            plt.imshow(jkmap/normmap)
+            plt.colorbar()
+            plt.title('JK / norm')
+
+            plt.figure(2)
+            plt.hist((jkmap/normmap).flatten(), bins=50)
+            plt.yscale('log')
+            plt.xlabel('Pixel value')
+            plt.ylabel('PDF')
+            print('JK/norm standard deviation: ', np.nanstd(jkmap/normmap))
+            
+            plt.figure(3)
+            plt.loglog(k, pk, color='k', marker='o', label='Measured Pk')
+            my_k = np.logspace(np.log10(np.amin(k)), np.log10(np.amax(k)), 50)
+            plt.loglog(my_k, 10**spec_mod(np.log10(my_k)), color='r', label='Interpolation in 50 log spaced k')
+            plt.xlabel('$k$ (1/arcsec)')
+            plt.ylabel('$P_k$ (arcsec$^2$)')
+            plt.legend()
+            plt.show()
+
         # Fix the model
-        self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
+        #self.noise_model = [normmap, lambda k_arcsec: spec_mod(k_arcsec)]
+        self.noise_model = [normmap, lambda k_arcsec: 10**spec_mod(np.log10(k_arcsec))]
         
 
     #==================================================
@@ -550,7 +587,7 @@ class Data():
                                 scale='log'):
         """
         Derive the noise model by interpolating the noise PK from MC realizations
-        after homogeneizing the noise.
+        after homogeneizing the noise        
         
         Parameters
         ----------
