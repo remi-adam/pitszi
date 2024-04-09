@@ -530,10 +530,11 @@ class InferenceFitting(object):
     
     def run_mcmc_profile(self, parinfo,
                          filename_sampler=None,
-                         show_fit_result=False):
+                         show_fit_result=False,
+                         set_bestfit=False):
         """
         This function fits the data given the current model and the parameter information
-        given by the user.
+        given by the user, using MCMC.
         
         Parameters
         ----------
@@ -554,6 +555,7 @@ class InferenceFitting(object):
         Other accepted parameters: 'RA' and 'Dec', 'min_to_maj_axis_ratio' and 'angle', 'ZL'
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): show the best fit model and residual.
+        - set_bestfit (bool): set the best fit to the model
 
         Outputs
         ----------
@@ -562,10 +564,13 @@ class InferenceFitting(object):
         the smooth component
 
         """
+
+        #========== Copy the input model
+        input_model = copy.deepcopy(self.model)
         
         #========== Check if the MCMC sampler was already recorded
         if filename_sampler is None:
-            sampler_file = self.output_dir+'/pitszi_MCMC_profile_sampler.h5'
+            sampler_file = self.output_dir+'/pitszi_MCMC_Profile_sampler.h5'
         else:
             sampler_file = filename_sampler
             
@@ -611,7 +616,7 @@ class InferenceFitting(object):
         backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
                                                      self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
         moves = emcee.moves.StretchMove(a=2.0)
-
+        
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         self.lnlike_profile, 
                                         args=[parinfo], 
@@ -630,12 +635,16 @@ class InferenceFitting(object):
         #========== Show results
         if show_fit_result:
             self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Profile')
-            self.mcmc_profile_results(sampler, parinfo)
+            self.run_mcmc_profile_results(sampler, parinfo)
 
         #========== Compute the best-fit model and set it
-        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
-        self.setpar_profile(best_par, parinfo)
-        
+        if set_bestfit:
+            best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+            self.setpar_profile(best_par, parinfo)
+            self.setup()
+        else:
+            self.model = input_model
+            
         return par_list, sampler
 
     
@@ -743,7 +752,7 @@ class InferenceFitting(object):
             MC_pressure_profile[i,:] = self.model.get_pressure_profile(r3d*u.kpc)[1].to_value('keV cm-3')
 
         #========== plots map
-        utils_plot.show_fit_result_ymap(self.output_dir+'/MCMC_radial_results_y_map.pdf',
+        utils_plot.show_fit_result_ymap(self.output_dir+'/MCMC_Profile_results_y_map.pdf',
                                         self.data.image,
                                         self.data.header,
                                         noise_mc,
@@ -752,15 +761,73 @@ class InferenceFitting(object):
                                         visu_smooth=visu_smooth.to_value('arcsec'))
         
         #========== plots ymap profile
-        utils_plot.show_fit_ycompton_profile(self.output_dir+'/MCMC_radial_results_y_profile.pdf',
+        utils_plot.show_fit_ycompton_profile(self.output_dir+'/MCMC_Profile_results_y_profile.pdf',
                                              r2d, data_yprof, data_yprof_err,
                                              best_y_profile, MC_y_profile,
                                              true_compton_profile=true_compton_profile)
         
         #========== plots pressure profile
-        utils_plot.show_fit_result_pressure_profile(self.output_dir+'/MCMC_radial_results_P_profile.pdf',
+        utils_plot.show_fit_result_pressure_profile(self.output_dir+'/MCMC_Profile_results_P_profile.pdf',
                                                     r3d, best_pressure_profile, MC_pressure_profile,
                                                     true_pressure_profile=true_pressure_profile)
+
+
+    #==================================================
+    # Compute the smooth model via forward curvefit
+    #==================================================
+    
+    def run_curvefit_profile(self, parinfo,
+                             show_fit_result=False):
+        """
+        This function fits the data given the current model and the parameter information
+        given by the user, using curvefit.
+        
+        Parameters
+        ----------
+        - parinfo (dictionary): the model parameters associated with 
+        self.model.model_pressure_profile to be fit as, e.g., 
+        parinfo =      {'P_0':                   # --> Parameter key (mandatory)
+                        {'guess':[0.01, 0.001],  # --> initial guess: center, uncertainty (mandatory)
+                         'unit': u.keV*u.cm**-3, # --> unit (mandatory, None if unitless)
+                         'limit':[0, np.inf],    # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[0.01, 0.001],  # --> Gaussian prior: mean, sigma (optional)
+                        },
+                        'r_p':
+                        {'limit':[0, np.inf], 
+                          'prior':[100, 1],
+                          'unit': u.kpc, 
+                        },
+                       }    
+        Other accepted parameters: 'RA' and 'Dec', 'min_to_maj_axis_ratio' and 'angle', 'ZL'
+        - show_fit_result (bool): show the best fit model and residual.
+
+        Outputs
+        ----------
+        - par_opt (list): the best fit parameters
+        - par_cov (2d matrix): the posterior covariance matrix
+
+        """
+
+
+        
+
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         
     #==================================================
@@ -1045,7 +1112,7 @@ class InferenceFitting(object):
         #========== Get the model
         if kind == 'brute':
             pk2d_test = self.get_pk2d_model_brute(physical=True, seed=None)[1].to_value('kpc2')
-        if kind == 'projection':
+        elif kind == 'projection':
             pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
         else:
             raise ValueError('lnlike_fluctuation only accepts kind="brute" or kind="projection".')
@@ -1083,7 +1150,8 @@ class InferenceFitting(object):
     def run_mcmc_fluctuation(self, parinfo,
                              kind='projection',
                              filename_sampler=None,
-                             show_fit_result=False):
+                             show_fit_result=False,
+                             set_bestfit=False):
         """
         This function fits the 3d power spectrum
         using a forward modeling approach via deprojection
@@ -1113,6 +1181,7 @@ class InferenceFitting(object):
         get_pk2d_model_proj or get_pk2d_model_brute to compute the model
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): set to true to produce plots for fitting results
+        - set_bestfit (bool): set the best fit to the model
         
         Outputs
         ----------
@@ -1121,10 +1190,12 @@ class InferenceFitting(object):
         the smooth component
         """
 
-
+        #========== Copy the input model
+        input_model = copy.deepcopy(self.model)
+        
         #========== Check if the MCMC sampler was already recorded
         if filename_sampler is None:
-            sampler_file = self.output_dir+'/pitszi_MCMC_fluctuation_sampler.h5'
+            sampler_file = self.output_dir+'/pitszi_MCMC_Fluctuation_'+kind+'_sampler.h5'
         else:
             sampler_file = filename_sampler
             
@@ -1144,7 +1215,7 @@ class InferenceFitting(object):
             mypool = ProcessPool()
         else:
             mypool = None
-
+        
         # Info
         if not self.silent:
             print('----- Fit parameters information -----')
@@ -1190,13 +1261,17 @@ class InferenceFitting(object):
         
         #========== Show results
         if show_fit_result:
-            self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Fluctuation')
-            self.run_mcmc_fluctuation_results(sampler, parinfo)
+            self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Fluctuation_'+kind)
+            self.run_mcmc_fluctuation_results(sampler, parinfo, extraname='_'+kind)
 
         #========== Compute the best-fit model and set it
-        best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
-        self.setpar_fluctuation(best_par, parinfo)
-        
+        if set_bestfit:
+            best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
+            self.setpar_fluctuation(best_par, parinfo)
+            self.setup()
+        else:
+            self.model = input_model
+
         return par_list, sampler
 
 
@@ -1205,7 +1280,7 @@ class InferenceFitting(object):
     #==================================================
     
     def run_mcmc_fluctuation_results(self, sampler, parinfo,
-                                     true_pk3d=None):
+                                     true_pk3d=None, extraname=''):
         """
         This is function is used to show the results of the MCMC
         regarding the radial fluctuation
@@ -1222,7 +1297,6 @@ class InferenceFitting(object):
         plots are produced
 
         """
-
 
         #========== Get the best-fit
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
@@ -1251,7 +1325,7 @@ class InferenceFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/MCMC_fluctuation_results_input_image.pdf',
+        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image.pdf',
                                               self.data.image,
                                               self._dy_image,
                                               self._ymap_sph1,
@@ -1260,19 +1334,20 @@ class InferenceFitting(object):
                                               self.data.header)
         
         #========== Plot the covariance matrix
-        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_fluctuation_results_covariance.pdf',
+        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_covariance.pdf',
                                               self._pk2d_noise_cov,
+                                              model_pk2d_covmat,
                                               self._pk2d_modref_cov)
         
         #========== Plot the Pk2d constraint
-        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_fluctuation_results_pk2d.pdf',
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
                                         self._pk2d_noise_rms,
                                         MC_pk2d, MC_pk2d_noise)
         
         #========== Plot the Pk3d constraint
-        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_fluctuation_results_pk3d.pdf',
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)

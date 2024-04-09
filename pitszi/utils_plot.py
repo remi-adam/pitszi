@@ -854,7 +854,7 @@ def show_fit_result_pk2d(figfile,
                  label='Data (noise uncertainty only)')
 
     # Model reference
-    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Reference model')
+    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Reference (best-fit) model')
     up, low = pk2d_modref+pk2d_data_err_model, pk2d_modref-pk2d_data_err_model
     low[low<=0] = 0
     plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*(up)), y2=np.sqrt(2*np.pi*k2d**2*(low)),
@@ -968,6 +968,7 @@ def show_fit_result_delta_ymap(figfile,
 
 def show_fit_result_covariance(figfile,
                                covmat_data,
+                               covmat_bfmodel,
                                covmat_model=None):
     '''
     This function plots the best fit map model
@@ -975,22 +976,19 @@ def show_fit_result_covariance(figfile,
     Parameters:
     ----------
     - figfile (str): name of the file to produce
-    - image (2d array): the data image
-    - header (str): the header
-    - model_ymap_sph1 (2d image): the best fit model
-    - model_ymap_sph2 (2d image): the best fit model deconvolved
-    - w8 (2d array): the weight map
-    - cmap (str): colormap
-    
+    - covmat_data (2d array): bin to bin noise covariance matrix
+    - covmat_bfmodel (2d array): bin to bin best fit model covariance matrix
+    - covmat_model (2d array): bin to bin reference model covariance matrix
+
     Output:
     -------
     - Plots produced
     '''
 
     if covmat_model is None:
-        Nrow = 1
-    else:
         Nrow = 2
+    else:
+        Nrow = 3
     
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(12, 5*Nrow))
@@ -1011,21 +1009,37 @@ def show_fit_result_covariance(figfile,
     plt.xlabel('k bin')
     plt.ylabel('k bin')
 
+    # Covariance best fit model
+    ax = plt.subplot(Nrow, 2, 3)
+    plt.imshow(covmat_bfmodel)
+    cb = plt.colorbar()
+    plt.title(r'Best fit model covariance matrix')
+    plt.xlabel('k bin')
+    plt.ylabel('k bin')
+    
+    # Correlation best fit model
+    ax = plt.subplot(Nrow, 2, 4)
+    plt.imshow(utils.correlation_from_covariance(covmat_bfmodel))
+    cb = plt.colorbar()
+    plt.title(r'Best fit model correlation matrix')
+    plt.xlabel('k bin')
+    plt.ylabel('k bin')
+
     if covmat_model is not None:
     
         # Covariance model
-        ax = plt.subplot(Nrow, 2, 3)
+        ax = plt.subplot(Nrow, 2, 5)
         plt.imshow(covmat_model)
         cb = plt.colorbar()
-        plt.title(r'Model covariance matrix')
+        plt.title(r'Ref model covariance matrix')
         plt.xlabel('k bin')
         plt.ylabel('k bin')
         
         # Correlation model
-        ax = plt.subplot(Nrow, 2, 4)
+        ax = plt.subplot(Nrow, 2, 6)
         plt.imshow(utils.correlation_from_covariance(covmat_model))
         cb = plt.colorbar()
-        plt.title(r'Model correlation matrix')
+        plt.title(r'Ref model correlation matrix')
         plt.xlabel('k bin')
         plt.ylabel('k bin')
     
