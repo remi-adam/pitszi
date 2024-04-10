@@ -10,6 +10,7 @@ from astropy.coordinates import SkyCoord
 from pathos.multiprocessing import ProcessPool
 from multiprocessing import Pool, cpu_count
 import emcee
+from scipy.optimize import curve_fit
 from minot.ClusterTools.map_tools import radial_profile_sb
 
 from pitszi import utils_fitting
@@ -85,15 +86,15 @@ class InferenceFitting(object):
                                         conf=conf,
                                         outfile=self.output_dir+'/MCMC'+extraname+'_chain_statistics.txt')
 
-        # Produce 1D plots of the chains
+        #---------- Produce 1D plots of the chains
         utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
         
-        # Produce 1D histogram of the chains
+        #---------- Produce 1D histogram of the chains
         namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_hist_'+i+'.pdf' for i in parlist]
         utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
                                  conf=conf, truth=truth)
 
-        # Produce 2D (corner) plots of the chains
+        #---------- Produce 2D (corner) plots of the chains
         utils_plot.chains_2Dplots_corner(par_chains,
                                          parlist,
                                          self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
@@ -105,6 +106,87 @@ class InferenceFitting(object):
                                       truth=truth)
     
 
+    #==================================================
+    # Compute results for a given curvefit
+    #==================================================
+    
+    def get_curvefit_outputs_results(self,
+                                     parlist,
+                                     parinfo,
+                                     popt, pcov,
+                                     conf=68.0,
+                                     truth=None,
+                                     extraname='',
+                                     Nsample=10000):
+        """
+        This function can be used to produce automated plots/files
+        that give the results of the curvefit fit
+        
+        Parameters
+        ----------
+        - parlist (list): the list of parameter names
+        - popt (1d array): best fit parameter values
+        - pcov (2d array): posterior covariance matrix
+        - conf (float): confidence limit in % used in results
+        - truth (list): the list of expected parameter value for the fit
+        - extraname (string): extra name to add after MCMC in file name
+
+        Outputs
+        ----------
+        Plots are produced
+
+        """
+
+        Nparam = len(parlist)
+        Nchains = 1
+        
+        #---------- Check the truth
+        if truth is not None:
+            if len(truth) != Nparam:
+                raise ValueError("The 'truth' keyword should match the number of parameters")
+
+        #---------- Mimic MCMC chains with multivariate Gaussian
+        par_chains = np.zeros((Nsample, Nparam))
+        isamp = 0
+        while isamp < Nsample:
+            param = np.random.multivariate_normal(popt, pcov)
+            cond = np.isfinite(self.prior_profile(param, parinfo)) # make sure params are within limits
+            if cond:
+                par_chains[isamp,:] = param
+                isamp += 1
+        
+        lnl_chains = np.zeros(Nsample)
+        for i in range(Nsample):
+            lnl_chains[i] = -0.5 * np.matmul((par_chains[i,:]-popt), np.matmul(pcov, (par_chains[i,:]-popt)))
+        par_chains = par_chains[np.newaxis]
+        lnl_chains = lnl_chains[np.newaxis]
+            
+        #---------- Compute statistics for the parameters
+        utils_fitting.chains_statistics(par_chains, lnl_chains,
+                                        parname=parlist,
+                                        conf=conf,
+                                        outfile=self.output_dir+'/CurveFit'+extraname+'_statistics.txt')
+            
+        #---------- Produce 1D plots of the chains
+        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/CurveFit'+extraname+'_1d_plot.pdf')
+        
+        #---------- Produce 1D histogram of the chains
+        namefiles = [self.output_dir+'/CurveFit'+extraname+'_hist_'+i+'.pdf' for i in parlist]
+        utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
+                                 conf=conf, truth=truth)
+
+        #---------- Produce 2D (corner) plots of the chains
+        utils_plot.chains_2Dplots_corner(par_chains,
+                                         parlist,
+                                         self.output_dir+'/CurveFit'+extraname+'_2d_plot_corner.pdf',
+                                         truth=truth)
+
+        utils_plot.chains_2Dplots_sns(par_chains,
+                                      parlist,
+                                      self.output_dir+'/CurveFit'+extraname+'_2d_plot_sns.pdf',
+                                      truth=truth)
+    
+        
     #==================================================
     # Profile parameter definition
     #==================================================
@@ -777,7 +859,8 @@ class InferenceFitting(object):
     #==================================================
     
     def run_curvefit_profile(self, parinfo,
-                             show_fit_result=False):
+                             show_fit_result=False,
+                             set_bestfit=False):
         """
         This function fits the data given the current model and the parameter information
         given by the user, using curvefit.
@@ -803,32 +886,192 @@ class InferenceFitting(object):
 
         Outputs
         ----------
+        - parlist (list): the list of the fit parameters
         - par_opt (list): the best fit parameters
         - par_cov (2d matrix): the posterior covariance matrix
 
         """
 
-
+        #========== Copy the input model
+        input_model = copy.deepcopy(self.model)
         
+        #========== Defines the fit parameters
+        par_list, par0_value, par0_err, par_min, par_max = self.defpar_profile(parinfo)
 
+        #========== Define the sigma
+        if self.method_use_covmat:
+            sigma = self.data.noise_covmat
+            if not self.silent:
+                print('Using the ymap covariance matrix with curve_fit is a bit ambitious, it may fail.')
+        else:
+            sigma = np.diag(self.data.noise_covmat)**0.5
 
-
+        #========== Defines the data
+        ymap = (self.data.image*self.data.mask).flatten()
         
+        #========== Fitting function
+        def fitfunc(x, *pars):
+            params = []
+            for ip in range(len(pars)): params.append(pars[ip])
+            self.setpar_profile(np.array(params), parinfo)
+            model_img = self.get_radial_model()
+            model_test = model_img * self.data.mask
+            return model_test.flatten()
 
+        #========== Run the fit
+        par_opt, par_cov = curve_fit(fitfunc, 0,
+                                     ymap,
+                                     p0=par0_value,
+                                     sigma=sigma,
+                                     absolute_sigma=True,
+                                     bounds=(par_min, par_max))
 
+        #========== Show results
+        if show_fit_result:
+            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov, extraname='_Profile')
+            self.run_curvefit_profile_results(par_opt, par_cov, parinfo)
+        
+        #========== Compute the best-fit model and set it
+        if set_bestfit:
+            self.setpar_profile(par_opt, parinfo)
+            self.setup()
+        else:
+            self.model = input_model
+        
+        return par_list, par_opt, par_cov
+    
+    
+    #==================================================
+    # Show the fit results related to profile
+    #==================================================
+    
+    def run_curvefit_profile_results(self, popt, pcov, parinfo,
+                                     visu_smooth=10*u.arcsec,
+                                     binsize_prof=5*u.arcsec,
+                                     true_pressure_profile=None,
+                                     true_compton_profile=None):
+        """
+        This is function is used to show the results of the MCMC
+        regarding the radial profile
+            
+        Parameters
+        ----------
+        - popt (1d array): parameter best fit
+        - pcov (2d array): parameter covariance matrix
+        - parinfo (dict): same as mcmc_profile
+        - visu_smooth (quantity): The extra smoothing FWHM for vidualization. Homogeneous to arcsec.
+        - binsize_prof (quantity): The binsize for the y profile. Homogeneous to arcsec
+        - true_pressure_profile (dict): pass a dictionary containing the profile to compare with
+        in the form {'r':array in kpc, 'p':array in keV cm-3}
+        - true_compton_profile (dict): pass a dictionary containing the profile to compare with
+        in the form {'r':array in arcmin, 'y':array in [y]}
+        
+        Outputs
+        ----------
+        plots are produced
 
+        """
+        
+        #========== Get noise MC 
+        noise_mc = self.data.noise_mc
+        if noise_mc.shape[0] > self.mcmc_Nresamp:
+            Nmc = self.mcmc_Nresamp
+            noise_mc = noise_mc[0:Nmc]
+        else:
+            Nmc = noise_mc.shape[0]
+            if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
 
+        #========== rms for profile
+        rms_prof = np.std(noise_mc, axis=0)
+        mymask = self.data.mask**2
+        mymask[self.data.mask == 0] = np.nan
+        rms_prof = rms_prof/mymask
+        rms_prof[~np.isfinite(rms_prof)] = np.nan
+        
+        #========== Get the best-fit
+        self.setpar_profile(popt, parinfo)
+        best_model = copy.deepcopy(self.model)
 
+        #========== Get the profile for the data, centered on best-fit center if fitted
+        data_yprof_tmp = radial_profile_sb(self.data.image, 
+                                           (best_model.coord.icrs.ra.to_value('deg'),
+                                            best_model.coord.icrs.dec.to_value('deg')), 
+                                           stddev=rms_prof, header=self.data.header, 
+                                           binsize=binsize_prof.to_value('deg'))
+        r2d = data_yprof_tmp[0]*60
+        data_yprof = data_yprof_tmp[1]
 
+        mc_y_data = np.zeros((Nmc, len(r2d)))
+        for i in range(Nmc):
+            mc_y_data[i,:] = radial_profile_sb(noise_mc[i,:,:], 
+                                               (best_model.coord.icrs.ra.to_value('deg'),
+                                                best_model.coord.icrs.dec.to_value('deg')), 
+                                               stddev=rms_prof, header=self.data.header, 
+                                               binsize=binsize_prof.to_value('deg'))[1]
+        data_yprof_err = np.std(mc_y_data, axis=0)
+        
+        #========== Compute best fit observables
+        self.setpar_profile(popt, parinfo)
+        best_ymap_sph = self.get_radial_model()
 
+        best_y_profile = radial_profile_sb(best_ymap_sph, 
+                                           (best_model.coord.icrs.ra.to_value('deg'),
+                                            best_model.coord.icrs.dec.to_value('deg')), 
+                                           stddev=best_ymap_sph*0+1, header=self.data.header, 
+                                           binsize=binsize_prof.to_value('deg'))[1]
 
-
-
-
-
-
-
-
+        r3d, best_pressure_profile = best_model.get_pressure_profile(np.logspace(1, 4, 100)*u.kpc)
+        r3d = r3d.to_value('kpc')
+        best_pressure_profile = best_pressure_profile.to_value('keV cm-3')
+        
+        #========== MC resampling
+        MC_ymap_sph         = np.zeros((self.mcmc_Nresamp, best_ymap_sph.shape[0], best_ymap_sph.shape[1]))
+        MC_y_profile        = np.zeros((self.mcmc_Nresamp, len(r2d)))
+        MC_pressure_profile = np.zeros((self.mcmc_Nresamp, len(r3d)))
+        
+        MC_pars = np.zeros((self.mcmc_Nresamp, len(popt)))
+        isamp = 0
+        while isamp < self.mcmc_Nresamp:
+            param = np.random.multivariate_normal(popt, pcov)
+            cond = np.isfinite(self.prior_profile(param, parinfo)) # make sure params are within limits
+            if cond:
+                MC_pars[isamp,:] = param
+                isamp += 1
+                
+        for i in range(self.mcmc_Nresamp):
+            # Get MC model
+            self.setpar_profile(MC_pars[i,:], parinfo)
+            MC_ymap_sph[i,:,:] = self.get_radial_model()
+            
+            # Get MC y profile
+            MC_y_profile[i,:] = radial_profile_sb(MC_ymap_sph[i,:,:], 
+                                                  (best_model.coord.icrs.ra.to_value('deg'),
+                                                   best_model.coord.icrs.dec.to_value('deg')), 
+                                                  stddev=self.data.image*0+1, header=self.data.header, 
+                                                  binsize=binsize_prof.to_value('deg'))[1]
+            # Get MC pressure profile
+            MC_pressure_profile[i,:] = self.model.get_pressure_profile(r3d*u.kpc)[1].to_value('keV cm-3')
+        
+        #========== plots map
+        utils_plot.show_fit_result_ymap(self.output_dir+'/CurveFit_Profile_results_y_map.pdf',
+                                        self.data.image,
+                                        self.data.header,
+                                        noise_mc,
+                                        best_ymap_sph,
+                                        mask=self.data.mask,
+                                        visu_smooth=visu_smooth.to_value('arcsec'))
+        
+        #========== plots ymap profile
+        utils_plot.show_fit_ycompton_profile(self.output_dir+'/CurveFit_Profile_results_y_profile.pdf',
+                                             r2d, data_yprof, data_yprof_err,
+                                             best_y_profile, MC_y_profile,
+                                             true_compton_profile=true_compton_profile)
+        
+        #========== plots pressure profile
+        utils_plot.show_fit_result_pressure_profile(self.output_dir+'/CurveFit_Profile_results_P_profile.pdf',
+                                                    r3d, best_pressure_profile, MC_pressure_profile,
+                                                    true_pressure_profile=true_pressure_profile)
+        
         
     #==================================================
     # Fluctuation parameter definition
@@ -1282,8 +1525,8 @@ class InferenceFitting(object):
     def run_mcmc_fluctuation_results(self, sampler, parinfo,
                                      true_pk3d=None, extraname=''):
         """
-        This is function is used to show the results of the MCMC
-        regarding the radial fluctuation
+        This function is used to show the results of the MCMC
+        regarding the fluctuation
             
         Parameters
         ----------
@@ -1348,6 +1591,182 @@ class InferenceFitting(object):
         
         #========== Plot the Pk3d constraint
         utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk3d.pdf',
+                                        k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
+                                        MC_pk3d,
+                                        true_pk3d=true_pk3d)
+
+        
+    #==================================================
+    # Fit the fluctuation model via forward curvefit
+    #==================================================
+    
+    def run_curvefit_fluctuation(self, parinfo,
+                                 kind='projection',
+                                 show_fit_result=False,
+                                 set_bestfit=False):
+        """
+        This function fits the 3d power spectrum
+        using a forward modeling approach via deprojection using curvefit
+        
+        Parameters
+        ----------
+        - parinfo_fluct (dictionary): the model parameters associated with 
+        self.model.model_pressure_fluctuation to be fit as, e.g., 
+        parinfo      = {'Norm':                     # --> Parameter key (mandatory)
+                        {'guess':[0.5, 0.3],        # --> initial guess: center, uncertainty (mandatory)
+                         'unit': None,              # --> unit (mandatory, None if unitless)
+                         'limit':[0, np.inf],       # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[0.5, 0.1],        # --> Gaussian prior: mean, sigma (optional)
+                        },
+                        'slope':
+                        {'limit':[-11/3-1, -11/3+1], 
+                          'unit': None, 
+                        },
+                        'L_inj':
+                        {'limit':[0, 10], 
+                          'unit': u.Mpc, 
+                        },
+                       }  
+        Other accepted parameters: 'Anoise'
+
+        - kind (str): projection or brute, for using 
+        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+        - show_fit_result (bool): set to true to produce plots for fitting results
+        - set_bestfit (bool): set the best fit to the model
+
+        Outputs
+        ----------
+        - parlist (list): the list of the fit parameters
+        - par_opt (list): the best fit parameters
+        - par_cov (2d matrix): the posterior covariance matrix
+
+        """
+
+        if kind != 'projection':
+            raise ValueError('Only "projection" method is suported with curvefit')
+        
+        #========== Copy the input model
+        input_model = copy.deepcopy(self.model)
+        
+        #========== Defines the fit parameters
+        par_list, par0_value, par0_err, par_min, par_max = self.defpar_fluctuation(parinfo)
+
+        #========== Define the sigma
+        if self.method_use_covmat:
+            sigma = self._pk2d_noise_cov
+        else:
+            sigma = self._pk2d_noise_rms
+
+        #========== Fitting function
+        def fitfunc(x, *pars):
+            params = []
+            for ip in range(len(pars)): params.append(pars[ip])
+            self.setpar_fluctuation(np.array(params), parinfo)            
+            pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
+            return pk2d_test
+
+        #========== Run the fit
+        par_opt, par_cov = curve_fit(fitfunc, 0,
+                                     self._pk2d_data,
+                                     p0=par0_value,
+                                     sigma=sigma,
+                                     absolute_sigma=True,
+                                     bounds=(par_min, par_max))
+
+        #========== Show results
+        if show_fit_result:
+            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov, extraname='_Fluctuation')
+            self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo)
+        
+        #========== Compute the best-fit model and set it
+        if set_bestfit:
+            self.setpar_fluctuation(par_opt, parinfo)
+        else:
+            self.model = input_model
+        
+        return par_list, par_opt, par_cov
+    
+    
+    #==================================================
+    # Show the fit results related to fluctuation
+    #==================================================
+    
+    def run_curvefit_fluctuation_results(self, popt, pcov, parinfo,
+                                         true_pk3d=None):
+        """
+        This function is used to show the results of the curvefit
+        regarding the fluctuation
+            
+        Parameters
+        ----------
+        - popt (1d array): parameter best fit
+        - pcov (2d array): parameter covariance matrix
+        - parinfo (dict): same as mcmc_profile
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        
+        Outputs
+        ----------
+        plots are produced
+
+        """
+
+        #========== Get the best-fit
+        self.setpar_fluctuation(popt, parinfo)
+        k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
+        
+        #========== Get the MC
+        MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
+        MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
+
+        MC_pars = np.zeros((self.mcmc_Nresamp, len(popt)))
+        isamp = 0
+        while isamp < self.mcmc_Nresamp:
+            param = np.random.multivariate_normal(popt, pcov)
+            cond = np.isfinite(self.prior_fluctuation(param, parinfo)) # make sure params are within limits
+            if cond:
+                MC_pars[isamp,:] = param
+                isamp += 1
+        
+        for imc in range(self.mcmc_Nresamp):
+            # Get MC model
+            self.setpar_fluctuation(MC_pars[imc,:], parinfo)
+
+            # Get MC noise
+            MC_pk2d_noise[imc,:] = self.nuisance_Anoise * self._pk2d_noise
+
+            # Get MC Pk2d
+            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - MC_pk2d_noise[imc,:]
+            
+            # Get MC Pk3d
+            MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
+
+        #========== Plot the fitted image data
+        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image.pdf',
+                                              self.data.image,
+                                              self._dy_image,
+                                              self._ymap_sph1,
+                                              self._ymap_sph2,
+                                              self.method_w8,
+                                              self.data.header)
+        
+        #========== Plot the covariance matrix
+        utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit_Fluctuation_results_covariance.pdf',
+                                              self._pk2d_noise_cov,
+                                              model_pk2d_covmat,
+                                              self._pk2d_modref_cov)
+        
+        #========== Plot the Pk2d constraint
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/CurveFit_Fluctuation_results_pk2d.pdf',
+                                        self._kctr_kpc, self._pk2d_data,
+                                        model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
+                                        self._pk2d_noise_rms,
+                                        MC_pk2d, MC_pk2d_noise)
+        
+        #========== Plot the Pk3d constraint
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/CurveFit_Fluctuation_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)
