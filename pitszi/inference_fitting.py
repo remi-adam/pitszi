@@ -196,7 +196,7 @@ class InferenceFitting(object):
         This function helps defining the parameter list, initial values and
         ranges for the profile fitting.
         We distinguish 4 kind of parameters:
-        - profile parameters
+        - profile parameters or M500
         - offset RA and Dec 
         - ellipticity min_to_maj_axis_ratio and angle
         - nuisance zero level ZL
@@ -233,17 +233,30 @@ class InferenceFitting(object):
         if 'angle'                 in parkeys: parinfo_prof.pop('angle')
         if 'ZL'                    in parkeys: parinfo_prof.pop('ZL')
 
-        # Loop over the keys
+        # Check that if M500 is a parameter, it is the only one
         Npar_prof = len(list(parinfo_prof.keys()))
+        if 'M500' in list(parinfo_prof.keys()) and Npar_prof > 1:
+            raise ValueError('M500 is a fit parameter, but not other profile parameters are accepted in this case.')    
+            
+        # Loop over the keys
         for ipar in range(Npar_prof):
             
             parkey = list(parinfo_prof.keys())[ipar]
 
             #----- Check that parameters are working
             try:
-                bid = self.model.model_pressure_profile[parkey]
+                if 'M500' == parkey:
+                    bid = self.model.M500
+                else:
+                    bid = self.model.model_pressure_profile[parkey]
             except:
                 raise ValueError('The parameter '+parkey+' is not in self.model.model_pressure_profile')    
+
+            if 'M500' == parkey:
+                try:
+                    bid = parinfo_prof[parkey]['P_ref']
+                except:
+                    raise ValueError('M500 dict should contain "P_ref":{UPP, A10UPP, etc} passed to set_pressure_profile_universal_param')    
 
             if 'guess' not in parinfo_prof[parkey]:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
@@ -413,7 +426,7 @@ class InferenceFitting(object):
         if 'min_to_maj_axis_ratio' in parkeys: parinfo_prof.pop('min_to_maj_axis_ratio')
         if 'angle'                 in parkeys: parinfo_prof.pop('angle')
         if 'ZL'                    in parkeys: parinfo_prof.pop('ZL')
-
+        
         # Loop over the keys
         parkeys_prof = list(parinfo_prof.keys())
 
@@ -504,7 +517,7 @@ class InferenceFitting(object):
         if 'angle'                 in parkeys: parinfo_prof.pop('angle')
         if 'ZL'                    in parkeys: parinfo_prof.pop('ZL')
         parkeys_prof = list(parinfo_prof.keys())
-
+        
         # Loop Profile
         for ipar in range(len(parkeys_prof)):
             parkey = parkeys_prof[ipar]
@@ -512,7 +525,12 @@ class InferenceFitting(object):
                 unit = parinfo_prof[parkey]['unit']
             else:
                 unit = 1
-            self.model.model_pressure_profile[parkey] = param[idx_par] * unit
+
+            if parkey == 'M500':
+                self.model.M500 = param[idx_par] * unit
+                self.model.set_pressure_profile_universal_param(parinfo['M500']['P_ref'])
+            else:
+                self.model.model_pressure_profile[parkey] = param[idx_par] * unit
             idx_par += 1
 
         #========== Center
@@ -635,6 +653,11 @@ class InferenceFitting(object):
                         },
                        }    
         Other accepted parameters: 'RA' and 'Dec', 'min_to_maj_axis_ratio' and 'angle', 'ZL'
+
+        Instead of the profile parameters, the mass M500 is also accepted but the M500 disctionary 
+        should also contain P_ref as the reference profile model, e.g. A10UPP, etc, to be passed to
+        model.set_pressure_profile_universal_param : 'M500':{'guess':..., 'P_ref': 'A10UPP'}
+
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): show the best fit model and residual.
         - set_bestfit (bool): set the best fit to the model
@@ -882,6 +905,11 @@ class InferenceFitting(object):
                         },
                        }    
         Other accepted parameters: 'RA' and 'Dec', 'min_to_maj_axis_ratio' and 'angle', 'ZL'
+
+        Instead of the profile parameters, the mass M500 is also accepted but the M500 disctionary 
+        should also contain P_ref as the reference profile model, e.g. A10UPP, etc, to be passed to
+        model.set_pressure_profile_universal_param : 'M500':{'guess':..., 'P_ref': 'A10UPP'}
+
         - show_fit_result (bool): show the best fit model and residual.
 
         Outputs
@@ -1771,4 +1799,3 @@ class InferenceFitting(object):
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)
         
-

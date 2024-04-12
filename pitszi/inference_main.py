@@ -20,6 +20,7 @@ import dill
 
 from pitszi import utils
 from pitszi import utils_pk
+from pitszi import title
 
 from pitszi.inference_fitting import InferenceFitting
 
@@ -204,6 +205,9 @@ class Inference(InferenceFitting):
         
         """
 
+        if not silent:
+            title.show_inference()
+        
         # Input data and model (deepcopy to avoid modifying the input when fitting)
         self.data  = copy.deepcopy(data)
         self.model = copy.deepcopy(model)

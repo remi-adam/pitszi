@@ -21,6 +21,7 @@ import pprint
 
 from minot.ClusterTools import map_tools
 from pitszi import utils_pk
+from pitszi import title
 
 
 #==================================================
@@ -116,6 +117,9 @@ class Data():
         - output_dir (str): directory where saving outputs
 
         """
+
+        if not silent:
+            title.show_data()
         
         kref = np.linspace(0, 1, 1000)*u.arcsec**-1
         

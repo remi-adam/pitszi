@@ -120,7 +120,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         
         #---------- Print the code header at launch
         if not silent:
-            title.show()
+            title.show_model()
             
         #---------- Admin
         self._silent     = silent
