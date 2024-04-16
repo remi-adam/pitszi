@@ -483,10 +483,10 @@ class Inference(InferenceFitting):
         
         Parameters
         ----------
-        apply_mask (bool): application of the data mask in the weight
-        apply_radial_model (bool): multiply the wight with the radial model
-        conv_radial_model_beam (bool): apply beam smoothing to the radial model
-        conv_radial_model_TF (bool): apply the transfer function to the radial model
+        - apply_mask (bool): application of the data mask in the weight
+        - apply_radial_model (bool): multiply the wight with the radial model
+        - conv_radial_model_beam (bool): apply beam smoothing to the radial model
+        - conv_radial_model_TF (bool): apply the transfer function to the radial model
         - remove_GNFW_core (bool): if True, and if the model is a GNFW, it will 
         set the core parameter from the model to zero
         - smooth_FWHM (quantity): smoothing of weight map, homogeneous to arcsec

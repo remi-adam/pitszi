@@ -746,7 +746,6 @@ class InferenceFitting(object):
         if set_bestfit:
             best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
             self.setpar_profile(best_par, parinfo)
-            self.setup()
         else:
             self.model = input_model
             
@@ -932,7 +931,7 @@ class InferenceFitting(object):
             if not self.silent:
                 print('Using the ymap covariance matrix with curve_fit is a bit ambitious, it may fail.')
         else:
-            sigma = np.diag(self.data.noise_covmat)**0.5
+            sigma = self.data.noise_rms.flatten()
 
         #========== Defines the data
         ymap = (self.data.image*self.data.mask).flatten()
@@ -962,7 +961,6 @@ class InferenceFitting(object):
         #========== Compute the best-fit model and set it
         if set_bestfit:
             self.setpar_profile(par_opt, parinfo)
-            self.setup()
         else:
             self.model = input_model
         
@@ -1539,7 +1537,6 @@ class InferenceFitting(object):
         if set_bestfit:
             best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
             self.setpar_fluctuation(best_par, parinfo)
-            self.setup()
         else:
             self.model = input_model
 
