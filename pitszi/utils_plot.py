@@ -663,22 +663,24 @@ def show_fit_ycompton_profile(figfile,
     -------
     - Plots produced
     '''
-
-    ci = 68.0
     
     #----- Compute model uncertainties
-    prof_perc = np.percentile(prof_mc,
-                              (100-(100-ci)/2.0, 50, (100-ci)/2.0), axis=0)
+    ci1 = 68.0
+    prof_perc1 = np.percentile(prof_mc,
+                              (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+    ci2 = 95.0
+    prof_perc2 = np.percentile(prof_mc,
+                              (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
     
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(7, 5))
     plt.errorbar(r2d, 1e5*data_yprof, 1e5*data_yprof_err, marker='o', ls='', color='k', label='Data')
     plt.plot(r2d, 1e5*prof_best, color='r', ls='-', label='Best-fit model')
-    plt.fill_between(r2d, 1e5*prof_perc[0,:], y2=1e5*prof_perc[2,:], alpha=0.3, color='blue')
-    plt.plot(r2d, 1e5*prof_perc[0,:], color='b', ls='--', label='Median and 68% C.I.')
-    plt.plot(r2d, 1e5*prof_perc[1,:], color='b', ls='-')
-    plt.plot(r2d, 1e5*prof_perc[2,:], color='b', ls='--')
+    plt.plot(r2d, 1e5*prof_perc1[1,:], color='b', ls='--', label='Median, 68% and 95% C.I.')
+    plt.fill_between(r2d, 1e5*prof_perc1[0,:], y2=1e5*prof_perc1[2,:], alpha=0.3, color='blue')
+    plt.fill_between(r2d, 1e5*prof_perc2[0,:], y2=1e5*prof_perc2[2,:], alpha=0.15, color='blue')
+
     if true_compton_profile is not None:
         plt.plot(true_compton_profile['r'], true_compton_profile['y']*1e5, label='True profile', color='orange')
     plt.xlabel('Radius (arcmin)')
@@ -715,20 +717,21 @@ def show_fit_result_pressure_profile(figfile,
     - Plots produced
     '''
 
-    ci = 68.0
-    
     #----- Compute model uncertainties
-    prof_perc = np.percentile(prof_mc,
-                              (100-(100-ci)/2.0, 50, (100-ci)/2.0), axis=0)
+    ci1 = 68.0
+    prof_perc1 = np.percentile(prof_mc,
+                              (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+    ci2 = 95.0
+    prof_perc2 = np.percentile(prof_mc,
+                               (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
     
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(7, 5))
     plt.plot(r3d, prof_best, color='r', ls='-', label='Best-fit model')
-    plt.fill_between(r3d, prof_perc[0,:], y2=prof_perc[2,:], alpha=0.3, color='blue')
-    plt.plot(r3d, prof_perc[0,:], color='b', ls='--', label='Median and 68% C.I.')
-    plt.plot(r3d, prof_perc[1,:], color='b', ls='-')
-    plt.plot(r3d, prof_perc[2,:], color='b', ls='--')
+    plt.plot(r3d, prof_perc1[1,:], color='b', ls='--', label='Median, 68% and 95% C.I.')
+    plt.fill_between(r3d, prof_perc2[0,:], y2=prof_perc2[2,:], alpha=0.15, color='blue')
+    plt.fill_between(r3d, prof_perc1[0,:], y2=prof_perc1[2,:], alpha=0.3, color='blue')
     if true_pressure_profile is not None:
         plt.plot(true_pressure_profile['r'], true_pressure_profile['p'], label='True profile', color='orange')
     plt.xlabel('Radius (kpc)')
@@ -768,28 +771,33 @@ def show_fit_result_pk3d(figfile,
     - Plots produced
 
     '''
-
-    ci = 68.0
     
     #----- Compute model uncertainties
-    pk3d_perc = np.percentile(pk3d_mc, (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
+    ci1 = 68.0
+    pk3d_perc1 = np.percentile(pk3d_mc,
+                               (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+    ci2 = 95.0
+    pk3d_perc2 = np.percentile(pk3d_mc,
+                               (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
 
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(7, 5))
     plt.loglog(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_best), color='r', ls='-', label='Best-fit')
-    plt.fill_between(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc[0,:]), np.sqrt(4*np.pi*k3d**3*pk3d_perc[2,:]),
+    plt.loglog(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc1[1,:]), color='b', ls='--', label='Median, 68% and 95% C.I.')
+
+    plt.fill_between(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc1[0,:]), np.sqrt(4*np.pi*k3d**3*pk3d_perc1[2,:]),
                      color='blue', alpha=0.3)
-    plt.loglog(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc[0,:]), color='b', ls='--')
-    plt.loglog(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc[1,:]), color='b', ls='-', label='Median and 68% C.I.')
-    plt.loglog(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc[2,:]), color='b', ls='--')
+    plt.fill_between(k3d, np.sqrt(4*np.pi*k3d**3*pk3d_perc2[0,:]), np.sqrt(4*np.pi*k3d**3*pk3d_perc2[2,:]),
+                     color='blue', alpha=0.15)
+    
     if true_pk3d is not None:
         plt.plot(true_pk3d['k'], np.sqrt(4*np.pi*true_pk3d['k']**3*true_pk3d['pk']),
                  label='True $P_k$', color='orange')
     plt.xlabel(r'$k$ (kpc$^{-1}$)')
     plt.ylabel(r'$\sqrt{4 \pi k^3 P(k)}$')
-    plt.ylim(np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc[1,:]))*1e-3,
-             np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc[1,:]))*5)
+    plt.ylim(np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc1[1,:]))*1e-3,
+             np.amax(np.sqrt(4*np.pi*k3d**3*pk3d_perc1[1,:]))*5)
     plt.xlim(np.amin(k3d), np.amax(k3d))
     plt.legend(fontsize=12)
     plt.savefig(figfile)
@@ -807,7 +815,7 @@ def show_fit_result_pk2d(figfile,
                          pk2d_data_err_model,
                          pk2d_data_err_noise,
                          pk2d_mc,
-                         pk2d_noise_mc,                         
+                         pk2d_noise_best, pk2d_noise_mc,                         
                          true_pk2d=None):
     '''
     This function plots the deprojected constraint on Pk3d
@@ -822,6 +830,7 @@ def show_fit_result_pk2d(figfile,
     - pk2d_data_err_model (1d array): uncertainty acssociated with the model
     - pk2d_data_err_noise (1d array): uncertainty associated with the noise
     - pk2d_mc (2d array): MC ressampling for the cluster model contribution
+    - pk2d_noise_best (1d array): bestfit noise contribution
     - pk2d_noise_mc (2d array): MC ressampling for the noise contribution
     - true_pk2d (dict): pass a dictionary containing the Pk3d to compare with
     in the form {'k':array in arcsec-1, 'pk':array in arcsec2}
@@ -831,14 +840,19 @@ def show_fit_result_pk2d(figfile,
     - Plots produced
 
     '''
-
-    ci = 68.0
     
     #----- Compute model uncertainties
-    pk2d_perc = np.percentile(pk2d_mc,
-                              (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
-    pk2d_noise_perc = np.percentile(pk2d_noise_mc,
-                                    (100-(100-68)/2.0, 50, (100-68)/2.0), axis=0)
+    ci1 = 68.0
+    pk2d_perc1 = np.percentile(pk2d_mc,
+                              (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+    pk2d_noise_perc1 = np.percentile(pk2d_noise_mc,
+                                    (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+
+    ci2 = 95.0
+    pk2d_perc2 = np.percentile(pk2d_mc,
+                              (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
+    pk2d_noise_perc2 = np.percentile(pk2d_noise_mc,
+                                    (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
 
     #----- Compute uncertainty
     err_tot = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_model**2+pk2d_data_err_noise**2)**0.5
@@ -854,31 +868,32 @@ def show_fit_result_pk2d(figfile,
                  label='Data (noise uncertainty only)')
 
     # Model reference
-    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Reference (best-fit) model')
+    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Best-fit model and intrinsic scatter')
     up, low = pk2d_modref+pk2d_data_err_model, pk2d_modref-pk2d_data_err_model
     low[low<=0] = 0
     plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*(up)), y2=np.sqrt(2*np.pi*k2d**2*(low)),
                      color='magenta', alpha=0.3)
     
     # Model fit
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc[0,:]), color='b', ls='--')
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc[1,:]), color='b', ls='-', label='Model median and 68% C.I.')
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc[2,:]), color='b', ls='--')
-    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc[0,:]), np.sqrt(2*np.pi*k2d**2*pk2d_perc[2,:]),
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc1[1,:]), color='b', ls='--', label='Model median, 68% and 95% C.I.')
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc1[0,:]), np.sqrt(2*np.pi*k2d**2*pk2d_perc1[2,:]),
                      color='blue', alpha=0.3)
-
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc2[0,:]), np.sqrt(2*np.pi*k2d**2*pk2d_perc2[2,:]),
+                     color='blue', alpha=0.15)
+    
     # Noise fit
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc[0,:]), color='darkcyan', ls='--')
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc[1,:]), color='darkcyan', ls='-',
-               label='Noise median and 68% C.I.')
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc[2,:]), color='darkcyan', ls='--')
-    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc[0,:]),
-                     np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc[2,:]),
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc1[1,:]), color='darkcyan', ls='--',
+               label='Noise median, 68% and 95% C.I.')
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc1[0,:]),
+                     np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc1[2,:]),
                      color='darkcyan', alpha=0.3)
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc2[0,:]),
+                     np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc2[2,:]),
+                     color='darkcyan', alpha=0.15)
 
     # Total
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_noise_perc[1,:] + pk2d_perc[1,:])),
-               color='red', ls='-', label='Total median')
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_modref)),
+               color='red', ls='-', label='Total best-fit')
         
     if true_pk2d is not None:
         plt.plot(true_pk2d['k'], np.sqrt(2*np.pi*true_pk2d['k']**2*true_pk2d['pk']),
@@ -888,6 +903,10 @@ def show_fit_result_pk2d(figfile,
     plt.xscale('log')
     plt.yscale('log')
     plt.xlim(np.amin(k2d)*0.9, np.amax(k2d)*1.1)
+    
+    plt.ylim(np.amax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*1e-3,
+             np.amax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*5)
+    
     plt.legend(fontsize=12)
     plt.savefig(figfile)
     plt.close()
@@ -897,14 +916,18 @@ def show_fit_result_pk2d(figfile,
 # Plot of delta_y / y fitted
 #==================================================
 
-def show_fit_result_delta_ymap(figfile,
-                               image,
-                               data_image,
-                               model_ymap_sph1,
-                               model_ymap_sph2,
-                               w8,
-                               header,
-                               cmap='Spectral_r'):
+def show_input_delta_ymap(figfile,
+                          image,
+                          data_image,
+                          model_ymap_sph1,
+                          model_ymap_sph2,
+                          w8,
+                          header,
+                          noise_mc,
+                          mask=None,
+                          visu_smooth=10,
+                          cmap='Spectral_r',
+                          contcol='k'):
     '''
     This function plots the best fit map model
     
@@ -916,20 +939,44 @@ def show_fit_result_delta_ymap(figfile,
     - model_ymap_sph1 (2d image): the best fit model
     - model_ymap_sph2 (2d image): the best fit model deconvolved
     - w8 (2d array): the weight map
+    - mask (2d array): the mask if any
+    - visu_smooth (float): the smoothing FWHM in arcsec
     - cmap (str): colormap
+    - contcol (str): contour color
     
     Output:
     -------
     - Plots produced
     '''
 
+    #----- Get extra data info
+    if mask is None:
+        mask = image*0+1
+
+    #----- Compute the rms at given scale
+    rms = np.std(gaussian_filter(noise_mc,
+                                 sigma=np.array([0,1,1])*visu_smooth/2.35/header['CDELT2']/3600),
+                 axis=0)
+    rms_img = np.std(gaussian_filter(noise_mc*w8[np.newaxis,:,:]/model_ymap_sph2,
+                                     sigma=np.array([0,1,1])*visu_smooth/2.35/header['CDELT2']/3600),
+                 axis=0)
+    wout = rms_img*0+1 # location of w8=0 before smoothing
+    wout[w8 < np.amax(w8/1e10)] = 0
+    levels = [-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2,
+              2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
+
+    #---------- Plot
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(23, 5))
 
     # Input data
     ax = plt.subplot(1, 4, 1, projection=WCS(header))
-    plt.imshow(image*1e5,cmap=cmap)
+    plt.imshow(mask * gaussian_filter(image,
+                                      sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5,cmap=cmap)
     cb = plt.colorbar()
+    plt.contour(mask*gaussian_filter(image,
+                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms,
+                levels=levels, colors=contcol)
     plt.title(r'y-Compton data ($\times 10^5$)')
     plt.xlabel('R.A. (deg)')
     plt.ylabel('Dec. (deg)')
@@ -952,8 +999,13 @@ def show_fit_result_delta_ymap(figfile,
     
     # dy/y w8
     ax = plt.subplot(1, 4, 4, projection=WCS(header))
-    plt.imshow(data_image, cmap=cmap)
+    plt.imshow(gaussian_filter(data_image,
+                               sigma=visu_smooth/2.35/header['CDELT2']/3600),cmap=cmap)
     cb = plt.colorbar()
+    plt.contour(wout*gaussian_filter(data_image,
+                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms_img,
+                levels=levels, colors=contcol)
+    
     plt.title(r'$\Delta y / y \times W$')
     plt.xlabel('R.A. (deg)')
     plt.ylabel(' ')
@@ -963,7 +1015,7 @@ def show_fit_result_delta_ymap(figfile,
 
 
 #==================================================
-# Plot of delta_y / y fitted
+# Plot of covariance
 #==================================================
 
 def show_fit_result_covariance(figfile,

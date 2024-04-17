@@ -1566,13 +1566,24 @@ class InferenceFitting(object):
 
         """
 
+        #========== Get noise MC 
+        noise_mc = self.data.noise_mc
+        if noise_mc.shape[0] > self.mcmc_Nresamp:
+            Nmc = self.mcmc_Nresamp
+            noise_mc = noise_mc[0:Nmc]
+        else:
+            Nmc = noise_mc.shape[0]
+            if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
+
         #========== Get the best-fit
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
 
         k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
-        
+
+        best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
+
         #========== Get the MC
         MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
         MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
@@ -1593,13 +1604,16 @@ class InferenceFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image.pdf',
-                                              self.data.image,
-                                              self._dy_image,
-                                              self._ymap_sph1,
-                                              self._ymap_sph2,
-                                              self.method_w8,
-                                              self.data.header)
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image.pdf',
+                                         self.data.image,
+                                         self._dy_image,
+                                         self._ymap_sph1,
+                                         self._ymap_sph2,
+                                         self.method_w8,
+                                         self.data.header,
+                                         noise_mc,
+                                         mask=self.data.mask,
+                                         visu_smooth=10)
         
         #========== Plot the covariance matrix
         utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_covariance.pdf',
@@ -1611,7 +1625,7 @@ class InferenceFitting(object):
         utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
-                                        self._pk2d_noise_rms,
+                                        best_pk2d_noise, self._pk2d_noise_rms,
                                         MC_pk2d, MC_pk2d_noise)
         
         #========== Plot the Pk3d constraint
@@ -1736,11 +1750,22 @@ class InferenceFitting(object):
 
         """
 
+        #========== Get noise MC 
+        noise_mc = self.data.noise_mc
+        if noise_mc.shape[0] > self.mcmc_Nresamp:
+            Nmc = self.mcmc_Nresamp
+            noise_mc = noise_mc[0:Nmc]
+        else:
+            Nmc = noise_mc.shape[0]
+            if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
+
         #========== Get the best-fit
         self.setpar_fluctuation(popt, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
         k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
-        
+
+        best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
+
         #========== Get the MC
         MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
         MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
@@ -1769,13 +1794,16 @@ class InferenceFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_fit_result_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image.pdf',
-                                              self.data.image,
-                                              self._dy_image,
-                                              self._ymap_sph1,
-                                              self._ymap_sph2,
-                                              self.method_w8,
-                                              self.data.header)
+        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image.pdf',
+                                         self.data.image,
+                                         self._dy_image,
+                                         self._ymap_sph1,
+                                         self._ymap_sph2,
+                                         self.method_w8,
+                                         self.data.header,
+                                         noise_mc,
+                                         mask=self.data.mask,
+                                         visu_smooth=10)
         
         #========== Plot the covariance matrix
         utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit_Fluctuation_results_covariance.pdf',
@@ -1788,7 +1816,7 @@ class InferenceFitting(object):
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
                                         self._pk2d_noise_rms,
-                                        MC_pk2d, MC_pk2d_noise)
+                                        MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
         
         #========== Plot the Pk3d constraint
         utils_plot.show_fit_result_pk3d(self.output_dir+'/CurveFit_Fluctuation_results_pk3d.pdf',
