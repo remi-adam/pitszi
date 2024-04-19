@@ -9,6 +9,7 @@ to compute derived properties or observables.
 # Requested imports
 #==================================================
 
+import os
 import numpy as np
 import astropy.units as u
 from astropy.io import fits
@@ -18,6 +19,7 @@ from astropy import constants as const
 from astropy.wcs import WCS
 from minot.ClusterTools import cluster_global
 import pprint
+import dill
 
 from pitszi                  import title
 from pitszi.model_library    import ModelLibrary
@@ -82,7 +84,6 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     ToDo
     ----------  
     - Improve the 3D pressure profile cube to avoid numercial issues near the center
-    - check if applying kmax isotropic makes sense before projection
     - deal with the fact that fluctuations can lead to negative pressure: add 'statistics' option
 
     """
@@ -212,6 +213,64 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
             print(('    '+str(type(par[keys[k]]))+''))
         print('=====================================================')
 
+
+    #==================================================
+    # Save parameters
+    #==================================================
+    
+    def save_model(self):
+        """
+        Save the current model object.
+        
+        Parameters
+        ----------
+            
+        Outputs
+        ----------
+        The parameters are saved in the output directory
+
+        """
+
+        # Create the output directory if needed
+        if not os.path.exists(self.output_dir): os.mkdir(self.output_dir)
+
+        # Save
+        with open(self.output_dir+'/model_parameters.pkl', 'wb') as pfile:
+            #pickle.dump(self.__dict__, pfile, pickle.HIGHEST_PROTOCOL)
+            dill.dump(self.__dict__, pfile)
+
+        # Text file for user
+        par = self.__dict__
+        keys = list(par.keys())
+        with open(self.output_dir+'/model_parameters.txt', 'w') as txtfile:
+            for k in range(len(keys)):
+                txtfile.write('--- '+(keys[k])+'\n')
+                txtfile.write('    '+str(par[keys[k]])+'\n')
+                txtfile.write('    '+str(type(par[keys[k]]))+'\n')
+
+                
+    #==================================================
+    # Load parameters
+    #==================================================
+    
+    def load_model(self, param_file):
+        """
+        Read a given parameter file to re-initialize the model object.
+        
+        Parameters
+        ----------
+        param_file (str): the parameter file to be read
+            
+        Outputs
+        ----------
+            
+        """
+
+        with open(param_file, 'rb') as pfile:
+            par = dill.load(pfile)
+            
+        self.__dict__ = par
+        
         
     #==================================================
     # Get the hidden variable

@@ -102,8 +102,10 @@ def chains_1Dhist(param_chains,
             truth_i = truth[ipar]
         else:
             truth_i = None
-            
-        seaborn_1d(param_chains[:,:,ipar].flatten(),
+    
+        flatchain = param_chains[:,:,ipar].flatten()
+        
+        seaborn_1d(flatchain.astype("float64"),
                    output_fig=out_files[ipar],
                    ci=conf/100, truth=truth_i, best=par_best_i,
                    label=parname[ipar],
@@ -897,8 +899,8 @@ def show_fit_result_pk2d(figfile,
         
     if true_pk2d is not None:
         plt.plot(true_pk2d['k'], np.sqrt(2*np.pi*true_pk2d['k']**2*true_pk2d['pk']),
-                 label='True $P_k$', color='orange')    
-    plt.xlabel(r'$k$ (arcsec$^{-1}$)')
+                 label='True $P_k$', color='orange')
+    plt.xlabel(r'$k$ (kpc$^{-1}$)')
     plt.ylabel(r'$\sqrt{2 \pi k^2 P(k)}$')
     plt.xscale('log')
     plt.yscale('log')
@@ -960,8 +962,7 @@ def show_input_delta_ymap(figfile,
     rms_img = np.std(gaussian_filter(noise_mc*w8[np.newaxis,:,:]/model_ymap_sph2,
                                      sigma=np.array([0,1,1])*visu_smooth/2.35/header['CDELT2']/3600),
                  axis=0)
-    wout = rms_img*0+1 # location of w8=0 before smoothing
-    wout[w8 < np.amax(w8/1e10)] = 0
+    rms_img[rms_img <=0] = np.nan
     levels = [-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2,
               2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
 
@@ -1002,8 +1003,8 @@ def show_input_delta_ymap(figfile,
     plt.imshow(gaussian_filter(data_image,
                                sigma=visu_smooth/2.35/header['CDELT2']/3600),cmap=cmap)
     cb = plt.colorbar()
-    plt.contour(wout*gaussian_filter(data_image,
-                                     sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms_img,
+    plt.contour(gaussian_filter(data_image,
+                                sigma=visu_smooth/2.35/header['CDELT2']/3600)/rms_img,
                 levels=levels, colors=contcol)
     
     plt.title(r'$\Delta y / y \times W$')

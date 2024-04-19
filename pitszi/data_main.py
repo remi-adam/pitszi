@@ -7,6 +7,7 @@ Data object, definined by the observational properties of the data.
 # Requested imports
 #==================================================
 
+import os
 import numpy as np
 import astropy.units as u
 from astropy.io import fits
@@ -18,6 +19,7 @@ from scipy.ndimage import gaussian_filter
 import copy
 import pickle
 import pprint
+import dill
 
 from minot.ClusterTools import map_tools
 from pitszi import utils_pk
@@ -53,6 +55,8 @@ class Data():
     Methods
     ----------
     - print_param: print the current Data parameters
+    - save_data: save the data object
+    - load_data: load a pre-existing data object
     - set_nika2_reference_noise_model: set the noise model to a baseline
     - set_nika2_reference_tf: set the transfer fucntion to a NIKA2 reference model
     - get_noise_monte_carlo_from_model: compute noise monte carlo given the noise model
@@ -187,6 +191,64 @@ class Data():
             print(('    '+str(par[keys[k]])))
             print(('    '+str(type(par[keys[k]]))+''))
         print('=====================================================')
+
+
+    #==================================================
+    # Save parameters
+    #==================================================
+    
+    def save_data(self):
+        """
+        Save the current data object.
+        
+        Parameters
+        ----------
+            
+        Outputs
+        ----------
+        The parameters are saved in the output directory
+
+        """
+
+        # Create the output directory if needed
+        if not os.path.exists(self.output_dir): os.mkdir(self.output_dir)
+
+        # Save
+        with open(self.output_dir+'/data_parameters.pkl', 'wb') as pfile:
+            #pickle.dump(self.__dict__, pfile, pickle.HIGHEST_PROTOCOL)
+            dill.dump(self.__dict__, pfile)
+
+        # Text file for user
+        par = self.__dict__
+        keys = list(par.keys())
+        with open(self.output_dir+'/data_parameters.txt', 'w') as txtfile:
+            for k in range(len(keys)):
+                txtfile.write('--- '+(keys[k])+'\n')
+                txtfile.write('    '+str(par[keys[k]])+'\n')
+                txtfile.write('    '+str(type(par[keys[k]]))+'\n')
+
+                
+    #==================================================
+    # Load parameters
+    #==================================================
+    
+    def load_data(self, param_file):
+        """
+        Read the a given parameter file to re-initialize the inference object.
+        
+        Parameters
+        ----------
+        param_file (str): the parameter file to be read
+            
+        Outputs
+        ----------
+            
+        """
+
+        with open(param_file, 'rb') as pfile:
+            par = dill.load(pfile)
+            
+        self.__dict__ = par
         
 
     #==================================================

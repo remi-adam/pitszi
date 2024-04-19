@@ -100,10 +100,10 @@ class InferenceFitting(object):
                                          self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
                                          truth=truth)
 
-        utils_plot.chains_2Dplots_sns(par_chains,
-                                      parlist,
-                                      self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
-                                      truth=truth)
+        #utils_plot.chuains_2Dplots_sns(par_chains,
+        #                              parlist,
+        #                              self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
+        #                              truth=truth)
     
 
     #==================================================
@@ -181,10 +181,10 @@ class InferenceFitting(object):
                                          self.output_dir+'/CurveFit'+extraname+'_2d_plot_corner.pdf',
                                          truth=truth)
 
-        utils_plot.chains_2Dplots_sns(par_chains,
-                                      parlist,
-                                      self.output_dir+'/CurveFit'+extraname+'_2d_plot_sns.pdf',
-                                      truth=truth)
+        #utils_plot.chains_2Dplots_sns(par_chains,
+        #                              parlist,
+        #                              self.output_dir+'/CurveFit'+extraname+'_2d_plot_sns.pdf',
+        #                              truth=truth)
     
         
     #==================================================
