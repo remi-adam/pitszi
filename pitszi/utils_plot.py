@@ -584,10 +584,10 @@ def show_fit_result_ymap(figfile,
               2,4,6,8,10,12,14,16,18,20,22,24,26,28,30]
 
     #----- Compute plot range
-    rng_map = [np.amin(gaussian_filter(model_ymap_sph,
-                                       sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5),
-               np.amax(gaussian_filter(model_ymap_sph,
-                                       sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5)]
+    rng_map = [np.amin(mask*gaussian_filter(image,
+                                            sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5),
+               np.amax(mask*gaussian_filter(image,
+                                            sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5)]
     
     stdres = np.std((gaussian_filter(image-model_ymap_sph,
                                      sigma=visu_smooth/2.35/header['CDELT2']/3600)*1e5)[mask > 0])

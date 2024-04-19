@@ -695,7 +695,13 @@ class InferenceFitting(object):
             mypool = ProcessPool()
         else:
             mypool = None
-            
+
+        # Get the inverse covariance matrix if needed
+        if self.method_use_covmat:
+            if not self.silent:
+                print('Using the ymap covariance matrix may failmay be unstable. Starting to compute C^-1')
+            self._ymap_invcov = np.linalg.inv(self.data.noise_covmat)
+                
         # Info
         if not self.silent:
             print('----- Fit parameters information -----')
@@ -716,7 +722,7 @@ class InferenceFitting(object):
             print('      - Use covariance matrix?        ')
             print(self.method_use_covmat)
             print('-----')
-            
+
         #========== Define the MCMC setup
         backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
                                                      self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
@@ -1459,6 +1465,13 @@ class InferenceFitting(object):
         the smooth component
         """
 
+        #========== Check the setup
+        print('----- Checking the Pk setup -----')
+        if self._pk_setup_done :
+            print('      The setup was done. We can proceed, but still make sure that it was done with the correct analysis framework.')
+        else:
+            print('      The setup was not done. Run pk_setup() with the correct analysis framework before proceeding.')
+
         #========== Copy the input model
         input_model = copy.deepcopy(self.model)
         
@@ -1580,7 +1593,7 @@ class InferenceFitting(object):
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
 
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_burnin)
 
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
 
@@ -1681,6 +1694,14 @@ class InferenceFitting(object):
 
         """
 
+        #========== Check the setup
+        print('----- Checking the Pk setup -----')
+        if self._pk_setup_done :
+            print('      The setup was done. We can proceed, but still make sure that it was done with the correct analysis framework.')
+        else:
+            print('      The setup was not done. Run pk_setup() with the correct analysis framework before proceeding.')
+
+        #========== Check the kind of analysis
         if kind != 'projection':
             raise ValueError('Only "projection" method is suported with curvefit')
         
@@ -1762,7 +1783,7 @@ class InferenceFitting(object):
         #========== Get the best-fit
         self.setpar_fluctuation(popt, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_Nresamp)
 
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
 

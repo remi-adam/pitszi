@@ -69,7 +69,7 @@ class Inference(InferenceFitting):
         - output_dir (str): the output directory
         
         # Useful hiden parameters computed by running the setup() function
-        - _setup_done (bool): tell us if the setup was already done
+        - _pk_setup_done (bool): tell us if the setup was already done
         - _reso_arcsec (float): the map resolution in arcsec
         - _reso_kpc (float): the map resolution in kpc
         - _kpc2arcsec (float): the conversion from kpc to arcsec
@@ -208,21 +208,21 @@ class Inference(InferenceFitting):
         if not silent:
             title.show_inference()
         
-        # Input data and model (deepcopy to avoid modifying the input when fitting)
+        #----- Input data and model (deepcopy to avoid modifying the input when fitting)
         self.data  = copy.deepcopy(data)
         self.model = copy.deepcopy(model)
 
-        # Nuisance parameters
+        #----- Nuisance parameters
         self.nuisance_ZL     = 0
         self.nuisance_Anoise = 1
 
-        # Binning in k
+        #----- Binning in k
         self.kbin_min   = kbin_min
         self.kbin_max   = kbin_max
         self.kbin_Nbin  = kbin_Nbin
         self.kbin_scale = kbin_scale # ['lin', 'log']
         
-        # Analysis methodology
+        #----- Analysis methodology
         self.method_use_covmat = method_use_covmat
         self.method_parallel = method_parallel
         if method_w8 == None:
@@ -231,7 +231,7 @@ class Inference(InferenceFitting):
             self.method_w8 = method_w8
         self.method_data_deconv  = method_data_deconv    # Deconvolve the data from TF and beam prior Pk
 
-        # MCMC parameters
+        #----- MCMC parameters
         self.mcmc_nwalkers = mcmc_nwalkers
         self.mcmc_nsteps   = mcmc_nsteps
         self.mcmc_burnin   = mcmc_burnin
@@ -239,26 +239,24 @@ class Inference(InferenceFitting):
         self.mcmc_run      = mcmc_run
         self.mcmc_Nresamp  = mcmc_Nresamp
 
-        # Admin
+        #----- Admin
         self.silent     = silent
         self.output_dir = output_dir
-        
-        # Useful hiden parameters
-        self._setup_done         = False
+
+        #========== Usefull hidden variable to be computed on the fly
+        #----- Useful hiden parameters for radial profile
+        self._ymap_invcov        = None
+
+        #----- Useful hiden parameters for Pk fitting
+        self._pk_setup_done      = False
         
         self._reso_arcsec        = None
         self._reso_kpc           = None
         self._kpc2arcsec         = None
-        
-        self._Kmnmn              = None
-        
+                
         self._dy_image           = None
         self._ymap_sph1          = None
         self._ymap_sph2          = None
-        self._ymap_invcov        = None
-        
-        self._conv_wf            = None
-        self._conv_pk2d3d        = None
         
         self._k2d_norm           = None
         self._kedges_kpc         = None
@@ -275,6 +273,11 @@ class Inference(InferenceFitting):
         self._pk2d_modref        = None
         self._pk2d_modref_rms    = None
         self._pk2d_totref_invcov = None
+
+        self._conv_wf            = None
+        self._conv_pk2d3d        = None
+        
+        self._Kmnmn              = None
 
         
     #==================================================
@@ -372,24 +375,32 @@ class Inference(InferenceFitting):
     # Setup: preparation
     #==================================================
     
-    def setup(self):
+    def pk_setup(self, Nmc=1000):
         """
-        This function defines the setup prior inference.
+        This function defines the setup prior power spectrum inference.
+        The setup is necessary for inference on the power spectrum:
+        - Compute map resolution and k binning information
+        - compute ymap residual to be used for Pk extraction
+        - compute the smooth model
+        - extract Pk data, reference model and noise properties
+        - compute conversion from Pk 2d to Pk3d
+        - compute the mode mixing matrix given the weights
         
         Parameters
         ----------
-        
+        - Nmc (int): the number of monte carlo to compute the model/noise statistics
+
         Outputs
         ----------
-        Necessary product are computed and defined as attributes
+        Necessary product are computed and defined as hidden parameters
 
         """
 
         #---------- Info
         if not self.silent:
             print('----- Running the setup -----')
-            if self._setup_done :
-                print('      - The setup was already done. It will be overwritten.')
+            if self._pk_setup_done :
+                print('      - The Pk setup was already done, but it will be overwritten.')
 
         #---------- General
         self._reso_arcsec = self.model.get_map_reso(physical=False).to_value('arcsec')
@@ -404,9 +415,7 @@ class Inference(InferenceFitting):
         self._ymap_sph1 = model_ymap_sph1
         self._ymap_sph2 = model_ymap_sph2
         self._dy_image  = dy_image
-        if self.method_use_covmat:
-            self._ymap_invcov = np.linalg.inv(self.data.noise_covmat)
-                
+
         #---------- Binning
         if not self.silent: print('    * Setup k binning')
 
@@ -427,8 +436,8 @@ class Inference(InferenceFitting):
         #---------- Pk
         if not self.silent: print('    * Setup Pk data, ref model and noise')
 
-        _, noise_mean, noise_cov = self.get_pk2d_noise_statistics(physical=True)
-        _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True)
+        _, noise_mean, noise_cov = self.get_pk2d_noise_statistics(physical=True, Nmc=Nmc)
+        _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
 
         self._pk2d_data          = self.get_pk2d_data(physical=True)[1].to_value('kpc2')
         self._pk2d_noise         = noise_mean.to_value('kpc2')
@@ -460,7 +469,7 @@ class Inference(InferenceFitting):
         self._Kmnmn = utils_pk.compute_Kmnmn(fft_w8)
         
         #---------- Update the setup
-        self._setup_done = True
+        self._pk_setup_done = True
         if not self.silent:
             print('----- The setup is done -----')
  
@@ -470,7 +479,8 @@ class Inference(InferenceFitting):
     #==================================================
     
     def set_method_w8(self,
-                      apply_mask=True,
+                      roi_mask=None,
+                      apply_data_mask=True,
                       apply_radial_model=False,
                       conv_radial_model_beam=True,
                       conv_radial_model_TF=False,
@@ -483,7 +493,8 @@ class Inference(InferenceFitting):
         
         Parameters
         ----------
-        - apply_mask (bool): application of the data mask in the weight
+        - roi_mask (2d array): a mask used to define the Region Of Interest
+        - apply_data_mask (bool): application of the data mask in the weight
         - apply_radial_model (bool): multiply the wight with the radial model
         - conv_radial_model_beam (bool): apply beam smoothing to the radial model
         - conv_radial_model_TF (bool): apply the transfer function to the radial model
@@ -499,10 +510,13 @@ class Inference(InferenceFitting):
         
         w8map = np.ones(self.data.image.shape)
 
-        #===== Apply mask
-        if apply_mask:
+        #===== Apply masks
+        if apply_data_mask:
             w8map *= self.data.mask 
 
+        if roi_mask is not None:
+            w8map *= roi_mask
+            
         #===== Apply radial model
         if apply_radial_model:
             # Extract the SZ model map
@@ -757,7 +771,8 @@ class Inference(InferenceFitting):
     #==================================================
     
     def get_pk2d_noise_statistics(self,
-                                  physical=False):
+                                  physical=False,
+                                  Nmc=None):
         """
         This function compute the noise properties associated
         with the data noise
@@ -788,11 +803,19 @@ class Inference(InferenceFitting):
 
         #----- Extract noise MC realization
         noise_ymap_mc = self.data.noise_mc
-        Nmc = noise_ymap_mc.shape[0]
+        Nmc0 = noise_ymap_mc.shape[0]
         if noise_ymap_mc is None:
             raise ValueError("Noise MC not available in data. Please use the class Data() to define it.")
-        if Nmc < 100 and not self.silent:
+        if Nmc0 < 100 and not self.silent:
             print('WARNING: the number of MC realizations to use is less than 100. This might not be enough.')
+
+        # Redefine the number of Mc upon request
+        if Nmc is not None:
+            if Nmc0 < Nmc: # just use Nmc0 if the requested number of MC is larger than available
+                Nmc = Nmc0
+                print('WARNING: the number requested number of MC realizations is larger than what is available in Data().')
+        else:
+            Nmc = Nmc0
 
         #----- Compute Pk2d MC realization
         noise_pk2d_mc = np.zeros((Nmc, len(kedges)-1))
@@ -844,7 +867,7 @@ class Inference(InferenceFitting):
         #---------- return
         return k2d, noise_pk2d_mean, noise_pk2d_covmat
 
-
+    
     #==================================================
     # Compute model variance statistics
     #==================================================
@@ -961,7 +984,7 @@ class Inference(InferenceFitting):
         """
 
         #----- Check the setup, reequiered here
-        if self._setup_done == False:
+        if self._pk_setup_done == False:
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
@@ -1003,7 +1026,7 @@ class Inference(InferenceFitting):
         """
         
         #----- Check the setup, reequiered here
-        if self._setup_done == False:
+        if self._pk_setup_done == False:
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
