@@ -1158,7 +1158,7 @@ class InferenceFitting(object):
                 raise ValueError('The parameter '+parkey+' is not in self.model.model_pressure_fluctuation')    
             
             if 'guess' not in parinfo_fluct[parkey]:
-                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
+                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')
             if 'unit' not in parinfo_fluct[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
     
@@ -1188,7 +1188,7 @@ class InferenceFitting(object):
     
             #----- Check that the param is ok wrt the model
             if 'guess' not in parinfo_nuisance[parkey]:
-                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')    
+                raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')
             if 'unit' not in parinfo_nuisance[parkey]:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
     
@@ -1593,7 +1593,7 @@ class InferenceFitting(object):
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
 
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_burnin)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_Nresamp)
 
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
 
