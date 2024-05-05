@@ -1638,9 +1638,9 @@ class InferenceFitting(object):
         utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
-                                        best_pk2d_noise, self._pk2d_noise_rms,
-                                        MC_pk2d, MC_pk2d_noise)
-        
+                                        self._pk2d_noise_rms,
+                                        MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
+
         #========== Plot the Pk3d constraint
         utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),

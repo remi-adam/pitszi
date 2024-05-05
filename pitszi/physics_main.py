@@ -361,7 +361,7 @@ def sigma_to_M3d_Z23(sigma, state='in-between', ell=True, ret_err=False):
 # Mach number from \int Pk from Zhuravleva + 2023 Table1
 #==================================================
 
-def sigma_rad_to_M3d_Z23(sigma, r_scaled, state='in-between', case='prod', ret_err=False):
+def sigma_rad_to_M3d_Z23(sigma, r, R500, state='in-between', case='prod', ret_err=False):
     """
     Zhuravleva + 2023 (MNRAS 520, 5157–5172 (2023))
     Implement the result from Tab. 1, in the case both radial dependence
@@ -373,7 +373,8 @@ def sigma_rad_to_M3d_Z23(sigma, r_scaled, state='in-between', case='prod', ret_e
     - sigma (float): the sqaure root of the integral of Pk
     sigma^2 = \int 4 pi k^2 Pk dk. sigma is directly the norm of 
     pitszi power spectrum
-    - r_scaled (float): radius divided by R500
+    - r (quantity): radius homogeneous to kpc
+    - R500 (quantity): R500 homogeneous to kpc
     - state (str): 'relaxed', 'in-between', 'unrelaxed' according to 
     the table in Zhuravleva + 2023
     - case (str): 'sum' (M1d = alpha + beta r/r500 + gamma dxi/xi) 
@@ -385,7 +386,9 @@ def sigma_rad_to_M3d_Z23(sigma, r_scaled, state='in-between', case='prod', ret_e
     - M3d (array): 3D Mach number as a function of radius
 
     """
-    
+
+    r_scaled = r.to_value('kpc') / R500.to_value('kpc')
+
     # Convert to what would be the sigma of a lognormal pdf for delta P/P + 1
     sigmaLN = sigmaLN_from_std(sigma)
 
