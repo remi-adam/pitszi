@@ -1191,20 +1191,20 @@ class Inference(InferenceFitting):
 
         #----- Get the Compton model
         compton_sph = self.model.get_sz_map(no_fluctuations=True)
-        compton3d = np.repeat(compton_sph[:,:,np.newaxis], pressure3d_sph.shape[2], axis=2)
+        compton3d = np.repeat(compton_sph[np.newaxis,:,:], pressure3d_sph.shape[0], axis=0)
 
         #----- Compute the window function in real space
         W3d = (cst.sigma_T / (cst.m_e * cst.c**2)* pressure3d_sph / compton3d).to_value('kpc-1')
 
         #----- Window function in Fourier space along kz
-        W_ft = np.abs(np.fft.fft(W3d, axis=2))**2 * los_reso**2 # No dimension
+        W_ft = np.abs(np.fft.fft(W3d, axis=0))**2 * los_reso**2 # No dimension
         
         #----- Integrate along kz
         k_z = np.fft.fftfreq(Nz, los_reso)
         k_z_sort = np.fft.fftshift(k_z)
-        W_ft_sort = np.fft.fftshift(W_ft, axes=2)
+        W_ft_sort = np.fft.fftshift(W_ft, axes=0)
         
-        N_theta = utils.trapz_loglog(W_ft_sort, k_z_sort, axis=2)*u.kpc**-1
+        N_theta = utils.trapz_loglog(W_ft_sort, k_z_sort, axis=0)*u.kpc**-1
     
         return N_theta
     
@@ -1237,21 +1237,21 @@ class Inference(InferenceFitting):
 
         #----- Get the Compton model
         compton_sph = self.model.get_sz_map(no_fluctuations=True)
-        compton3d = np.repeat(compton_sph[:,:,np.newaxis], pressure3d_sph.shape[2], axis=2)
+        compton3d = np.repeat(compton_sph[np.newaxis,:,:], pressure3d_sph.shape[0], axis=0)
 
         #----- Compute the window function in real space
         W3d = (cst.sigma_T / (cst.m_e * cst.c**2)* pressure3d_sph / compton3d).to_value('kpc-1')
 
         #----- Window function in Fourier space along kz
-        W_ft = np.abs(np.fft.fft(W3d, axis=2))**2 * los_reso**2 # No dimension
+        W_ft = np.abs(np.fft.fft(W3d, axis=0))**2 * los_reso**2 # No dimension
 
         #----- Defines k   
         k_x = np.fft.fftfreq(Nx, proj_reso)
         k_y = np.fft.fftfreq(Ny, proj_reso)
         k_z = np.fft.fftfreq(Nz, los_reso)
-        k3d_x, k3d_y, k3d_z = np.meshgrid(k_x, k_y, k_z, indexing='ij')
+        k3d_z, k3d_y, k3d_x = np.meshgrid(k_z, k_y, k_x, indexing='ij')
         k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
-        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_y, k2d_x = np.meshgrid(k_y, k_x, indexing='ij')
         k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
         
         #----- Compute Pk3d over sampled k
@@ -1263,24 +1263,24 @@ class Inference(InferenceFitting):
         P3d_flat_sort = P3d_flat_sort.to_value('kpc3')
         P3d_flat_sort = np.append(np.array([0]), P3d_flat_sort) # Add k=0 back
         P3d_flat = P3d_flat_sort[revidx]       # Unsort
-        P3d = P3d_flat.reshape(Nx,Ny,Nz)       # Reshape to k cube
+        P3d = P3d_flat.reshape(Nz,Ny,Nx)       # Reshape to k cube
         
         #----- Sort along kz       
         k_z_sort = np.fft.fftshift(k_z)
-        W_ft_sort = np.fft.fftshift(W_ft, axes=2)
-        P3d_kzsort = np.fft.fftshift(P3d, axes=2)
+        W_ft_sort = np.fft.fftshift(W_ft, axes=0)
+        P3d_kzsort = np.fft.fftshift(P3d, axes=0)
 
         #----- integrate along kz
-        Pk2d = np.zeros((Nx, Ny)) # Shape kx, ky
+        Pk2d = np.zeros((Ny, Nx)) # Shape kx, ky
         # Make a loop to avoid memory issue (otherwise 5d array kx, ky, x, y, k_z integrated along kz)
         #integrand = P3d_kzsort[:,:,np.newaxis,np.newaxis,:]*W_ft_sort[np.newaxis, np.newaxis, :,:,:] # kx, ky, x, y, k_z
         #Pk2d_xy = utils.trapz_loglog(integrand, k_z_sort, axis=4) #kx, ky, x, y
         #mask_kxky = self.data.mask[np.newaxis, np.newaxis, :,:]
         #Pk2d_exact = np.sum(Pk2d_xy * mask_kxky, axis=(2,3)) / np.sum(mask_kxky, axis=(2,3)) #kpc2
-        for ik in range(Nx):
-            for jk in range(Ny):
+        for ik in range(Ny):
+            for jk in range(Nx):
                 integrand = P3d_kzsort[ik,jk,np.newaxis,np.newaxis,:]*W_ft_sort
-                Pk2d_ikjk_xy = utils.trapz_loglog(integrand, k_z_sort, axis=2)
+                Pk2d_ikjk_xy = utils.trapz_loglog(integrand, k_z_sort, axis=0)
                 Pk2d[ik,jk] = np.sum(Pk2d_ikjk_xy * self.data.mask) / np.sum(self.data.mask)
 
         return k2d_norm*u.kpc**-1, Pk2d*u.kpc**2

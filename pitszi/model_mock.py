@@ -163,17 +163,17 @@ class ModelMock(object):
         #----- Get the offset of the cluster
         map_center = self.get_map_center()
         offset = (self._coord).transform_to(SkyOffsetFrame(origin=map_center))
-        dRA    = offset.data.lon.to_value('radian')
+        dRA    = -offset.data.lon.to_value('radian')
         dDec   = offset.data.lat.to_value('radian')
         dx     = dRA*self._D_ang.to_value('kpc')   # Offset map along x
         dy     = dDec*self._D_ang.to_value('kpc')  # Offset map along y
-
+        
         #----- Compute the pixel center coordinates
-        ctr_xpix_vec = np.linspace(-Nx*proj_reso/2, Nx*proj_reso/2, Nx) + dx
+        ctr_xpix_vec = np.linspace(-Nx*proj_reso/2, Nx*proj_reso/2, Nx) - dx
         ctr_ypix_vec = np.linspace(-Ny*proj_reso/2, Ny*proj_reso/2, Ny) - dy
         ctr_zpix_vec = np.linspace(-Nz*los_reso/2,  Nz*los_reso/2,  Nz)
 
-        coord_x, coord_y, coord_z = np.meshgrid(ctr_xpix_vec, ctr_ypix_vec, ctr_zpix_vec,
+        coord_z, coord_y, coord_x = np.meshgrid(ctr_zpix_vec, ctr_ypix_vec, ctr_xpix_vec,
                                                 indexing='ij')
 
         #----- Apply ellipticity
@@ -182,13 +182,13 @@ class ModelMock(object):
         angle_3 = self._triaxiality['euler_angle3'].to_value('deg')
 
         rot = Rotation.from_euler('ZXZ', [angle_1, angle_2, angle_3], degrees=True)
-        coordinates = np.stack((coord_x, coord_y, coord_z), axis=-1)
-        coordinates_reshape = coordinates.reshape(-1, 3)
-        rotated_coordinates = rot.apply(coordinates_reshape).reshape(coord_x.shape + (3,))
-        rot_coord_x = rotated_coordinates[:,:,:,0] / self._triaxiality['min_to_maj_axis_ratio']
-        rot_coord_y = rotated_coordinates[:,:,:,1] / self._triaxiality['int_to_maj_axis_ratio']
-        rot_coord_z = rotated_coordinates[:,:,:,2]
-        
+        coordinates = np.array([coord_x.flatten(), coord_y.flatten(), coord_z.flatten()]).T
+        rotated_coordinates = rot.apply(coordinates)
+
+        rot_coord_x = rotated_coordinates[:,0].reshape(coord_x.shape) / self._triaxiality['min_to_maj_axis_ratio']
+        rot_coord_y = rotated_coordinates[:,1].reshape(coord_y.shape) / self._triaxiality['int_to_maj_axis_ratio']
+        rot_coord_z = rotated_coordinates[:,2].reshape(coord_z.shape)
+    
         #----- Compute the radius grid and flatten
         rad_grid = np.sqrt((rot_coord_x)**2 + (rot_coord_y)**2 + (rot_coord_z)**2)
         rad_grid_flat = rad_grid.flatten()
@@ -220,7 +220,7 @@ class ModelMock(object):
                 print('               This induces a discountinuity wich may cause ringing.')
         
         #----- Reshape to the grid
-        p_grid = p_grid_flat.reshape(Nx, Ny, Nz)
+        p_grid = p_grid_flat.reshape(Nz, Ny, Nx)
         
         return p_grid*u.keV*u.cm**-3
 
@@ -262,7 +262,7 @@ class ModelMock(object):
         #----- Bypass if no fluctuations
         if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
             if self._model_pressure_fluctuation['Norm'] == 0:
-                fluctuation_cube = np.zeros((Nx, Ny, Nz))
+                fluctuation_cube = np.zeros((Nz, Ny, Nx))
                 return fluctuation_cube
 
         #----- Get the k arrays along each axis
@@ -271,7 +271,7 @@ class ModelMock(object):
         k_z = np.fft.fftfreq(Nz, los_reso)
 
         #----- Define the k grid and norm vector
-        k3d_x, k3d_y, k3d_z = np.meshgrid(k_x, k_y, k_z, indexing='ij')
+        k3d_z, k3d_y, k3d_x = np.meshgrid(k_z, k_y, k_x, indexing='ij')
         k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
     
         #----- Get the Pk model on the grid
@@ -283,7 +283,7 @@ class ModelMock(object):
         P3d_flat_sort = P3d_flat_sort.to_value('kpc3')          # Take the unit out
         P3d_flat_sort = np.append(np.array([0]), P3d_flat_sort) # Add P(k=0) = 0 back
         P3d_flat = P3d_flat_sort[revidx]                        # Unsort
-        P3d_k_grid = P3d_flat.reshape(Nx,Ny,Nz)                 # Unflatten to k cube
+        P3d_k_grid = P3d_flat.reshape(Nz,Ny,Nx)                 # Unflatten to k cube
                 
         #----- kill the unwanted mode: zero level and values beyond isotropic range if requested
         kmax_isosphere = self.get_kmax_isotropic().to_value('kpc-1')
@@ -297,7 +297,7 @@ class ModelMock(object):
         amplitude =  np.sqrt(P3d_k_grid / (proj_reso*proj_reso*los_reso))
 
         #----- Generate the 3D field
-        field = np.random.normal(loc=0, scale=1, size=(Nx,Ny,Nz))
+        field = np.random.normal(loc=0, scale=1, size=(Nz,Ny,Nx))
         fftfield = np.fft.fftn(field) * amplitude
         fluctuation_cube = np.real(np.fft.ifftn(fftfield))
     
@@ -350,7 +350,7 @@ class ModelMock(object):
             pressure_fluctuation_cube = self.get_pressure_cube_fluctuation(seed=seed, force_isotropy=force_isotropy)
 
         #----- Go to Compton
-        intPdl = np.sum(pressure_profile_cube*(1 + pressure_fluctuation_cube), axis=2) * self._los_reso
+        intPdl = np.sum(pressure_profile_cube*(1 + pressure_fluctuation_cube), axis=0) * self._los_reso
         compton = (cst.sigma_T / (cst.m_e * cst.c**2) * intPdl).to_value('')
         
         #----- Convolution with instrument response

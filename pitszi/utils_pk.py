@@ -521,8 +521,7 @@ def multiply_Kmnmn_bis(K, T):
 def extract_pk3d(cube, proj_reso, los_reso,
                  Nbin=100, scalebin='lin',
                  kmin=None, kmax=None, kedges=None,
-                 statistic='mean',
-                 apply_volume=False):
+                 statistic='mean'):
     """
     Measure the power spectrum in 3 dimensions in k bins.
     The unit of the k array is the inverse of the resolution
@@ -539,7 +538,6 @@ def extract_pk3d(cube, proj_reso, los_reso,
     - kmin/max (float): the min and max k to use in defining the bins
     - kedges (1d np array): directly provide the bin edges in a Nbin+1 array (in this case,
     - statistic (str or function): the statistics to be used in binned_statistic
-    - apply_volume (bool): set True to multiply each bin by 4 pi delta_k^3 volume
         
     Outputs
     ----------
