@@ -459,7 +459,7 @@ class Inference(InferenceFitting):
         ymap_wf = self.get_p3d_to_p2d_from_window_function()
         
         self._conv_wf     = ymap_wf
-        self._conv_pk2d3d = (np.sum(ymap_wf*self.method_w8**2)/np.sum(self.method_w8**2)).to_value('kpc-1')
+        self._conv_pk2d3d = (np.nansum(ymap_wf*self.method_w8**2)/np.nansum(self.method_w8**2)).to_value('kpc-1')
 
         #---------- Bin-to-bin mixing
         if not self.silent: print('    * Setup bin-to-bin mixing')
@@ -721,6 +721,7 @@ class Inference(InferenceFitting):
         #---------- Compute the data to be used for Pk
         delta_y    = img_y - model_ymap_sph1
         dy_image = (delta_y - np.mean(delta_y)) / model_ymap_sph2 * self.method_w8
+        dy_image[model_ymap_sph2 <=0] = 0 # Ensure that bad pixels are set to zero, e.g. beyond R_trunc
         
         return dy_image, model_ymap_sph1, model_ymap_sph2
     
@@ -833,6 +834,7 @@ class Inference(InferenceFitting):
                 
             # Noise to Pk
             image_noise_mc = (img_y - np.mean(img_y))/model_ymap_sph2 * self.method_w8
+            image_noise_mc[model_ymap_sph2 <= 0] = 0
             k2d, pk_mc =  utils_pk.extract_pk2d(image_noise_mc, reso, kedges=kedges)
             noise_pk2d_mc[imc,:] = pk_mc
             
@@ -923,6 +925,7 @@ class Inference(InferenceFitting):
             # Test image
             delta_y = test_ymap - model_ymap_sph1
             test_image = (delta_y - np.mean(delta_y))/model_ymap_sph2 * self.method_w8
+            test_image[model_ymap_sph2 <= 0] = 0
 
             # Pk
             k2d, pk_mc =  utils_pk.extract_pk2d(test_image, reso, kedges=kedges)
@@ -1205,7 +1208,9 @@ class Inference(InferenceFitting):
         W_ft_sort = np.fft.fftshift(W_ft, axes=0)
         
         N_theta = utils.trapz_loglog(W_ft_sort, k_z_sort, axis=0)*u.kpc**-1
-    
+
+        N_theta[np.isnan(N_theta.value)] = 0
+        
         return N_theta
     
     

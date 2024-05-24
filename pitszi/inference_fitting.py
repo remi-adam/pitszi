@@ -1631,7 +1631,7 @@ class InferenceFitting(object):
         #========== Plot the covariance matrix
         utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_covariance.pdf',
                                               self._pk2d_noise_cov,
-                                              model_pk2d_covmat,
+                                              model_pk2d_covmat.to_value('kpc4'),
                                               self._pk2d_modref_cov)
         
         #========== Plot the Pk2d constraint
@@ -1829,7 +1829,7 @@ class InferenceFitting(object):
         #========== Plot the covariance matrix
         utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit_Fluctuation_results_covariance.pdf',
                                               self._pk2d_noise_cov,
-                                              model_pk2d_covmat,
+                                              model_pk2d_covmat.to_value('kpc4'),
                                               self._pk2d_modref_cov)
         
         #========== Plot the Pk2d constraint
