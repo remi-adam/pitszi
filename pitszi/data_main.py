@@ -48,7 +48,7 @@ class Data():
            function that depends on radius from the center in arcsec.
         a) function that give the noise power spectrum, once normalized by its amplitude,
            as a function of k in arcsec^-1
-    - noise_mc (3d np array): Monte Carlo noise realizations. Shape = (Nmc, Nx, Ny)
+    - noise_mc (3d np array): Monte Carlo noise realizations. Shape = (Nmc, Ny, Nx)
     - silent (bool): set to True to give information
     - output_dir (str): directory where saving outputs
 
@@ -337,7 +337,7 @@ class Data():
         # Define the wavevector
         k_x = np.fft.fftfreq(Nx, reso_arcsec) # 1/arcsec
         k_y = np.fft.fftfreq(Ny, reso_arcsec)
-        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='xy')
         k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
         k2d_norm_flat = k2d_norm.flatten()
     
@@ -353,7 +353,7 @@ class Data():
 
         # Generate the normalized noise
         amplitude =  np.sqrt(P2d_k_grid / reso_arcsec**2)
-        noise = np.random.normal(0, 1, size=(Nmc, Nx, Ny))
+        noise = np.random.normal(0, 1, size=(Nmc, Ny, Nx))
         noise = np.fft.fftn(noise, axes=(1,2))
         noise = np.real(np.fft.ifftn(noise * amplitude, axes=(1,2)))
         
@@ -373,7 +373,7 @@ class Data():
 
         # Case of a map
         if type(self.noise_model[0]) == type(self.image):
-            if self.noise_model[0].shape != (Nx, Ny):
+            if self.noise_model[0].shape != (Ny, Nx):
                 raise ValueError('The radial dependence of the model (a map) does not match the data shape')
             noise = noise * np.transpose(np.dstack([self.noise_model[0]]*Nmc), axes=(2,0,1))
 
@@ -670,7 +670,7 @@ class Data():
             raise ValueError('The noise_mc should be defined for this function')
         
         #----- General info
-        Nmc, Nx, Ny = self.noise_mc.shape
+        Nmc, Ny, Nx = self.noise_mc.shape
         if Nmc < 2: raise ValueError('The number of MC should be large, at least larger than 1.')
         reso = np.abs(self.header['CDELT1'])*3600
         normmap = np.std(self.noise_mc, axis=0)
@@ -730,7 +730,7 @@ class Data():
         noise_mc = self.get_noise_monte_carlo_from_covariance(Nmc=Nmc)
         
         #----- General info
-        Nmc, Nx, Ny = noise_mc.shape
+        Nmc, Ny, Nx = noise_mc.shape
         if Nmc < 2: raise ValueError('The number of MC should be large, at least larger than 1.')
         reso = np.abs(self.header['CDELT1'])*3600
         normmap = np.std(noise_mc, axis=0)
