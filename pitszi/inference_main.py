@@ -1279,7 +1279,7 @@ class Inference(InferenceFitting):
         #Pk2d_exact = np.sum(Pk2d_xy * mask_kxky, axis=(2,3)) / np.sum(mask_kxky, axis=(2,3)) #kpc2
         for ik in range(Ny):
             for jk in range(Nx):
-                integrand = P3d_kzsort[ik,jk,np.newaxis,np.newaxis,:]*W_ft_sort
+                integrand = P3d_kzsort[:,ik,jk,np.newaxis,np.newaxis]*W_ft_sort
                 Pk2d_ikjk_xy = utils.trapz_loglog(integrand, k_z_sort, axis=0)
                 Pk2d[ik,jk] = np.sum(Pk2d_ikjk_xy * self.data.mask) / np.sum(self.data.mask)
 
