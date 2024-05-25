@@ -129,11 +129,10 @@ def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_bea
     
     # TF filtering
     if apps_TF_LS:
-        Nx = image.shape[0]
-        Ny = image.shape[1]
+        Ny, Nx = image.shape
         k_x = np.fft.fftfreq(Nx, reso)
         k_y = np.fft.fftfreq(Ny, reso)
-        k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='xy')
         k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
         k2d_norm_flat = k2d_norm.flatten()
 
@@ -177,11 +176,10 @@ def deconv_transfer_function(image, reso, beamFWHM, TF, dec_TF_LS=True, dec_beam
     FT_map = np.fft.fft2(image)
 
     # Get the k arrays
-    Nx = image.shape[0]
-    Ny = image.shape[1]
+    Ny, Nx = image.shape
     k_x = np.fft.fftfreq(Nx, reso)
     k_y = np.fft.fftfreq(Ny, reso)
-    k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='ij')
+    k2d_x, k2d_y= np.meshgrid(k_x, k_y, indexing='xy')
     k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
     k2d_norm_flat = k2d_norm.flatten()
 
@@ -360,21 +358,21 @@ def compute_Kmnmn(W):
 
     """
     
-    Nx, Ny = W.shape
-    K = np.zeros((Nx, Ny, Nx, Ny), dtype=complex)  # m, n, m1, n1
+    Ny, Nx = W.shape
+    K = np.zeros((Ny, Nx, Ny, Nx), dtype=complex)  # m, n, m1, n1
     
-    for n1 in range(Ny):
-        for m1 in range(Nx):
-            for n in range(Ny):
-                for m in range(Nx):
+    for n1 in range(Nx):
+        for m1 in range(Ny):
+            for n in range(Nx):
+                for m in range(Ny):
                     if m1 <= m and n1 <= n:
                         K[m, n, m1, n1] = W[m - m1, n - n1,]
                     elif m1 <= m and n1 > n:
-                        K[m, n, m1, n1] = W[m - m1, Ny + n - n1]
+                        K[m, n, m1, n1] = W[m - m1, Nx + n - n1]
                     elif m1 > m and n1 <= n:
-                        K[m, n,  m1, n1] = W[Nx + m - m1, n - n1]
+                        K[m, n,  m1, n1] = W[Ny + m - m1, n - n1]
                     elif m1 > m and n1 > n:
-                        K[m, n, m1, n1] = W[Nx + m - m1, Ny + n - n1]
+                        K[m, n, m1, n1] = W[Ny + m - m1, Nx + n - n1]
     
     return K
 
@@ -401,27 +399,27 @@ def compute_RQ(k2d, kedge, beta=0):
 
     """
        
-    Nx, Ny = k2d.shape
+    Ny, Nx = k2d.shape
     Nb = len(kedge)-1
-    R = np.zeros((Nx, Ny, Nb))
-    Q = np.zeros((Nx, Ny, Nb))
+    R = np.zeros((Nb, Ny, Nx))
+    Q = np.zeros((Nb, Ny, Nx))
     
     for b in range(Nb):
         wbin = (k2d >= kedge[b]) * (k2d < kedge[b+1])
         sigma = np.sum(wbin) # Number of kmn falling in bin
-        for n in range(Ny):
-            for m in range(Nx):
+        for n in range(Nx):
+            for m in range(Ny):
                 cond = (kedge[b] <= k2d[m,n]) and (kedge[b+1] > k2d[m,n])
                 if cond:
                     if beta == 0:
-                        R[m,n, b] = 1.0 / sigma 
-                        Q[m,n, b] = 1.0
+                        R[b, m,n] = 1.0 / sigma 
+                        Q[b, m,n] = 1.0
                     else:
-                        R[m,n, b] = k2d[m,n]**beta / sigma
-                        Q[m,n, b] = 1/k2d[m,n]**beta
+                        R[b, m,n] = k2d[m,n]**beta / sigma
+                        Q[b, m,n] = 1/k2d[m,n]**beta
                 else:
-                    R[m,n, b] = 0.0
-                    Q[m,n, b] = 0.0
+                    R[b, m,n] = 0.0
+                    Q[b, m,n] = 0.0
                     
     return R, Q
 
@@ -447,13 +445,12 @@ def compute_Mbb(R, K, Q):
 
     """
     
-    Nx, Ny = R.shape[0], R.shape[1]
-    Nb = R.shape[2]
+    Nb, Ny, Nx = R.shape
     Mbb = np.zeros((Nb, Nb))
     for ib in range(Nb):
         for jb in range(Nb):            
-                sum_KQ  = np.sum(np.abs(K)**2 * (Q[:,:,jb])[np.newaxis, np.newaxis, :, :], axis=(2,3))
-                sum_RKQ = np.sum(R[:,:,ib] * sum_KQ)
+                sum_KQ  = np.sum(np.abs(K)**2 * (Q[jb, :,:])[np.newaxis, np.newaxis, :, :], axis=(2,3))
+                sum_RKQ = np.sum(R[ib, :,:] * sum_KQ)
                 Mbb[ib, jb] = sum_RKQ
                 
     return Mbb/(Nx*Ny)**2
@@ -479,14 +476,14 @@ def multiply_Kmnmn(K, T):
 
     """
 
-    Nx, Ny = T.shape
-    KxT = np.zeros((Nx, Ny), dtype=complex)  # m,n
+    Ny, Nx = T.shape
+    KxT = np.zeros((Ny, Nx), dtype=complex)  # m,n
     
-    for n in range(Ny):
-        for m in range(Nx):
+    for n in range(Nx):
+        for m in range(Ny):
             KxT[m, n] = np.sum(K[m, n, :, :] * T) 
         
-    return KxT / Nx/Ny
+    return KxT / Ny/Nx
 
 
 def multiply_Kmnmn_bis(K, T):
@@ -506,9 +503,9 @@ def multiply_Kmnmn_bis(K, T):
 
     """
 
-    Nx, Ny = T.shape
-    KxT = np.zeros((Nx, Ny), dtype=complex)  # m,n
-    T_reshaped = np.tile(T, (Nx, Ny, 1, 1))
+    Ny, Nx = T.shape
+    KxT = np.zeros((Ny, Nx), dtype=complex)  # m,n
+    T_reshaped = np.tile(T, (Ny, Nx, 1, 1))
     KxT = np.sum(K * T_reshaped, axis=(2, 3))
         
     return KxT / Nx/Ny
@@ -546,13 +543,13 @@ def extract_pk3d(cube, proj_reso, los_reso,
     """
     
     # Get the number of pixels
-    Nx, Ny, Nz = cube.shape
+    Nz, Ny, Nx = cube.shape
 
     # Define the k_i and k_norm
     k_x = np.fft.fftfreq(Nx, proj_reso)
     k_y = np.fft.fftfreq(Ny, proj_reso)
     k_z = np.fft.fftfreq(Nz, los_reso)
-    k3d_x, k3d_y, k3d_z = np.meshgrid(k_x, k_y, k_z, indexing='ij')
+    k3d_z, k3d_y, k3d_x = np.meshgrid(k_z, k_y, k_x, indexing='ij')
     k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
     
     # Compute the Pk cube
@@ -632,12 +629,12 @@ def extract_pk2d(image, proj_reso,
     """
     
     # Get the number of pixels
-    Nx, Ny = image.shape
+    Ny, Nx = image.shape
 
     # Define the k_i and k_norm
     k_x = np.fft.fftfreq(Nx, proj_reso)
     k_y = np.fft.fftfreq(Ny, proj_reso)
-    k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+    k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='xy')
     k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
     
     # Compute the Pk amplitide
@@ -730,9 +727,9 @@ def extract_pk2d_arevalo(image, proj_reso,
     #----- Possibility to define the bins in different ways        
     if kctr is None:    # The user does not gives the central k values
         # First need the k grid
-        k_x = np.fft.fftfreq(image.shape[0], proj_reso)
-        k_y = np.fft.fftfreq(image.shape[1], proj_reso)
-        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k_x = np.fft.fftfreq(image.shape[1], proj_reso)
+        k_y = np.fft.fftfreq(image.shape[0], proj_reso)
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='xy')
         k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
 
         # Define the kmin/max from the grid or the user

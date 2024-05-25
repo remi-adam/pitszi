@@ -236,7 +236,7 @@ class InferenceFitting(object):
         # Check that if M500 is a parameter, it is the only one
         Npar_prof = len(list(parinfo_prof.keys()))
         if 'M500' in list(parinfo_prof.keys()) and Npar_prof > 1:
-            raise ValueError('M500 is a fit parameter, but not other profile parameters are accepted in this case.')    
+            raise ValueError('M500 is a fit parameter, thus not other profile parameter is accepted.')    
             
         # Loop over the keys
         for ipar in range(Npar_prof):
@@ -1468,9 +1468,11 @@ class InferenceFitting(object):
         #========== Check the setup
         print('----- Checking the Pk setup -----')
         if self._pk_setup_done :
-            print('      The setup was done. We can proceed, but still make sure that it was done with the correct analysis framework.')
+            print('      The setup was done.')
+            print('      We can proceed, but make sure that it was done with the correct analysis framework.')
         else:
-            print('      The setup was not done. Run pk_setup() with the correct analysis framework before proceeding.')
+            print('      The setup was not done.')
+            print('      Run pk_setup() with the correct analysis framework before proceeding.')
 
         #========== Copy the input model
         input_model = copy.deepcopy(self.model)
@@ -1593,7 +1595,8 @@ class InferenceFitting(object):
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
 
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_Nresamp)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
+                                                                                Nmc=self.mcmc_Nresamp)
 
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
 
@@ -1637,7 +1640,8 @@ class InferenceFitting(object):
         #========== Plot the Pk2d constraint
         utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
-                                        model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
+                                        model_pk2d_ref.to_value('kpc2'),
+                                        np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
                                         self._pk2d_noise_rms,
                                         MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
 
@@ -1697,9 +1701,11 @@ class InferenceFitting(object):
         #========== Check the setup
         print('----- Checking the Pk setup -----')
         if self._pk_setup_done :
-            print('      The setup was done. We can proceed, but still make sure that it was done with the correct analysis framework.')
+            print('      The setup was done.')
+            print('      We can proceed, but make sure that it was done with the correct analysis framework.')
         else:
-            print('      The setup was not done. Run pk_setup() with the correct analysis framework before proceeding.')
+            print('      The setup was not done.')
+            print('      Run pk_setup() with the correct analysis framework before proceeding.')
 
         #========== Check the kind of analysis
         if kind != 'projection':
@@ -1783,7 +1789,8 @@ class InferenceFitting(object):
         #========== Get the best-fit
         self.setpar_fluctuation(popt, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True, Nmc=self.mcmc_Nresamp)
+        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
+                                                                                Nmc=self.mcmc_Nresamp)
 
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
 
@@ -1835,7 +1842,8 @@ class InferenceFitting(object):
         #========== Plot the Pk2d constraint
         utils_plot.show_fit_result_pk2d(self.output_dir+'/CurveFit_Fluctuation_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
-                                        model_pk2d_ref.to_value('kpc2'), np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
+                                        model_pk2d_ref.to_value('kpc2'),
+                                        np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
                                         self._pk2d_noise_rms,
                                         MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
         

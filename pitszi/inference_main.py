@@ -574,7 +574,7 @@ class Inference(InferenceFitting):
         """
 
         # Define the grid size
-        Nx, Ny = self.data.image.shape
+        Ny, Nx = self.data.image.shape
 
         # Get the resolution in the right unit (physical or angle)
         if physical:
@@ -587,7 +587,7 @@ class Inference(InferenceFitting):
         # Grid sampling in k space
         k_x = np.fft.fftfreq(Nx, reso)
         k_y = np.fft.fftfreq(Ny, reso)
-        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='ij')
+        k2d_x, k2d_y = np.meshgrid(k_x, k_y, indexing='xy')
         k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
 
         return k2d_x*unit, k2d_y*unit, k2d_norm*unit
@@ -1033,7 +1033,7 @@ class Inference(InferenceFitting):
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
-        Nx, Ny   = self._k2d_norm.shape
+        Ny, Nx   = self._k2d_norm.shape
         k2d_flat = self._k2d_norm.flatten()
 
         # Projection
@@ -1058,7 +1058,7 @@ class Inference(InferenceFitting):
     
         # Apply Kmn (multiply_Kmnmn_bis, i.e. without loop, is slower)
         pk2d_K = np.abs(utils_pk.multiply_Kmnmn(np.abs(self._Kmnmn)**2,
-                                                pk2d_flat.reshape(Nx, Ny))) / Nx / Ny
+                                                pk2d_flat.reshape(Ny, Nx))) / Nx / Ny
 
         # Bin
         pk2d_mod, _, _ = stats.binned_statistic(k2d_flat, pk2d_K.flatten(),
