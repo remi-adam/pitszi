@@ -132,14 +132,14 @@ class ModelSampling(object):
 
         header = self.get_map_header()
         reso   = self.get_map_reso().to_value('deg')
-        nx     = header['NAXIS1']
-        ny     = header['NAXIS2']
+        Nx     = header['NAXIS1']
+        Ny     = header['NAXIS2']
 
         if physical:
-            map_fov = [nx*reso*np.pi/180*self._D_ang.to_value('kpc'),
-                       ny*reso*np.pi/180*self._D_ang.to_value('kpc')]*u.kpc
+            map_fov = [Nx*reso*np.pi/180*self._D_ang.to_value('kpc'),
+                       Ny*reso*np.pi/180*self._D_ang.to_value('kpc')]*u.kpc
         else:
-            map_fov = [nx*reso, ny*reso]*u.deg
+            map_fov = [Nx*reso, Ny*reso]*u.deg
         
         return map_fov
 
