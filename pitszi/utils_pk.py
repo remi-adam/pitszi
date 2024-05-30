@@ -521,9 +521,10 @@ def convert_pkln_to_pkgauss(Pk_r, reso_x, reso_y, reso_z):
     and Pk_s be the power spectrum of the gaussian field s that is
     used to generate the lognormal field as
     field_ln = exp(s)
-
     This function convert Pk_r to the Pk_s
-
+    Note that the field mean is zero here and should be defined a 
+    posteriori in real space (see e.g. get_pressure_cube_fluctuation in 
+    model_mock.py).
     See M. Greiner and T. A. Enßlin, A&A 574, A86 (2015)
         
     Parameters
