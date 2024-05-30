@@ -284,7 +284,11 @@ class ModelMock(object):
         P3d_flat_sort = np.append(np.array([0]), P3d_flat_sort) # Add P(k=0) = 0 back
         P3d_flat = P3d_flat_sort[revidx]                        # Unsort
         P3d_k_grid = P3d_flat.reshape(Nz,Ny,Nx)                 # Unflatten to k cube
-                
+
+        #----- Convert for lognormal
+        if self._model_pressure_fluctuation['statistics'] == 'lognormal':
+            P3d_k_grid = utils_pk.convert_pkln_to_pkgauss(P3d_k_grid, proj_reso, proj_reso, los_reso)
+        
         #----- kill the unwanted mode: zero level and values beyond isotropic range if requested
         kmax_isosphere = self.get_kmax_isotropic().to_value('kpc-1')
 
@@ -300,7 +304,13 @@ class ModelMock(object):
         field = np.random.normal(loc=0, scale=1, size=(Nz,Ny,Nx))
         fftfield = np.fft.fftn(field) * amplitude
         fluctuation_cube = np.real(np.fft.ifftn(fftfield))
-    
+
+        if self._model_pressure_fluctuation['statistics'] == 'lognormal':
+            sig2 = np.mean(amplitude**2) # The mean of LN distrib is exp(mu+s^2/2) and sig^2 = np.mean(ampli^2)
+            fluctuation_cube -= sig2/2   # So we want the mean to be -(mu + sig^2/2), with mu=0
+            fluctuation_cube = np.exp(fluctuation_cube) # take exponential
+            fluctuation_cube -= 1                       # Subtract 1 to have dP/P instead of dP/P+1 which is LN
+        
         if not self.silent:
             print('----- INFO: fluctuation cube rms.')
             print('            Expected rms over the full k range:', self._model_pressure_fluctuation['Norm'])

@@ -515,6 +515,52 @@ def multiply_Kmnmn_bis(K, T):
 # Measure the 3D power spectrum naively
 #==================================================
 
+def convert_pkln_to_pkgauss(Pk_r, reso_x, reso_y, reso_z):
+    """
+    Let Pk_r be the power spectrum of the simulated lognormal field r
+    and Pk_s be the power spectrum of the gaussian field s that is
+    used to generate the lognormal field as
+    field_ln = exp(s)
+
+    This function convert Pk_r to the Pk_s
+
+    See M. Greiner and T. A. Enßlin, A&A 574, A86 (2015)
+        
+    Parameters
+    ----------
+    - Pk_r (3d np array): lognormal field powerspectrum
+    - reso_x (float): the resolution along the x axis
+    - reso_y (float): the resolution along the y axis
+    - reso_z (float): the resolution along the z axis
+
+    Outputs
+    ----------
+    - Pk_s (np array): Pk followed by the gaussian field 
+    """
+    
+    # Get sampling info
+    Nz, Ny, Nx = Pk_r.shape
+    Vx = reso_x * reso_y * reso_z
+    Vk = 1 / (Nx*Ny*Nz*Vx)
+
+    k_x = np.fft.fftfreq(Nx, reso_x) # 1/kpc
+    k_y = np.fft.fftfreq(Ny, reso_y)
+    k_z = np.fft.fftfreq(Nz, reso_z)
+    k3d_z, k3d_y, k3d_x = np.meshgrid(k_z, k_y, k_x, indexing='ij')
+    knorm = (k3d_z**2 + k3d_y**2 + k3d_x**2)**0.5
+
+    # Apply the convertion
+    I    = np.abs(np.fft.fftn(Pk_r)*Vk + 1)    
+    Pk_s = np.abs(np.fft.ifftn(np.log(I))*Vx*Nx*Ny*Nz)
+    Pk_s[knorm == 0] = 0
+    
+    return Pk_s
+
+
+#==================================================
+# Measure the 3D power spectrum naively
+#==================================================
+
 def extract_pk3d(cube, proj_reso, los_reso,
                  Nbin=100, scalebin='lin',
                  kmin=None, kmax=None, kedges=None,

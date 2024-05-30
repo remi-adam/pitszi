@@ -95,7 +95,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     def __init__(self,
                  name='Cluster',
                  RA=0.0*u.deg, Dec=0.0*u.deg,
-                 redshift=0.01,
+                 redshift=0.5,
                  M500=1e15*u.Unit('Msun'),
                  cosmology=astropy.cosmology.Planck15,
                  silent=False,
@@ -166,6 +166,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         self.set_pressure_profile_universal_param(pressure_model='P13UPP')
         
         dPpar = self._validate_model_fluctuation_parameters({"name":'CutoffPowerLaw',
+                                                             "statistics":'gaussian', # or lognormal
                                                              "Norm":0.25,
                                                              "slope":-11/3.0, 
                                                              "Linj":1*u.Mpc,
@@ -174,10 +175,10 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         
         #---------- Sampling
         self._map_center = SkyCoord(RA, Dec, frame="icrs")
-        self._map_reso   = 0.01*u.deg
-        self._map_fov    = [5.0, 5.0]*u.deg
+        self._map_reso   = 5*u.arcsec
+        self._map_fov    = [5.0, 5.0]*u.arcmin
         self._map_header = None
-        self._los_reso   = 10*u.kpc
+        self._los_reso   = 20*u.kpc
         self._los_size   = 2 * 2*u.Mpc
 
 

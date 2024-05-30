@@ -504,6 +504,7 @@ class ModelLibrary(object):
 
         # List of available authorized models
         model_list = ['CutoffPowerLaw']
+        stats_list = ['gaussian', 'lognormal']
         
         # Check that the input is a dictionary
         if type(inpar) != dict :
@@ -518,7 +519,17 @@ class ModelLibrary(object):
             print('The fluctuation model can be:')
             print(model_list)
             raise ValueError("The requested model is not available")
-        
+
+        # Check that input contains a statistics
+        if 'statistics' not in list(inpar.keys()) :
+            raise ValueError("The model dictionary should contain a 'statistics' field")
+            
+        # Check that the statistics is acceptable
+        if not inpar['statistics'] in stats_list:
+            print('The fluctuation "statistics" can be:')
+            print(stats_list)
+            raise ValueError("The requested statistics are not available")
+
         #---------- Deal with the case of CutoffPowerLaw
         if inpar['name'] == 'CutoffPowerLaw':
             # Check the content of the dictionary
@@ -551,6 +562,7 @@ class ModelLibrary(object):
 
             # All good at this stage, setting parameters
             outpar = {"name" : 'CutoffPowerLaw',
+                      "statistics": inpar['statistics'],
                       "Norm" : inpar['Norm'],
                       "slope": inpar['slope'],
                       "Linj" : inpar['Linj'].to('kpc'),
