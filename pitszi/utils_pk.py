@@ -563,6 +563,7 @@ def convert_pkln_to_pkgauss(Pk_r, reso_x, reso_y, reso_z):
 #==================================================
 
 def extract_pk3d(cube, proj_reso, los_reso,
+                 cube2=None,
                  Nbin=100, scalebin='lin',
                  kmin=None, kmax=None, kedges=None,
                  statistic='mean'):
@@ -576,6 +577,7 @@ def extract_pk3d(cube, proj_reso, los_reso,
     - cube (np array): 3d data cube as nd array
     - proj_reso (float): the resolution along the projected direction
     - los_reso (float) the resolution along the line of sight
+    - cube2 (np array): same as cube. Use to do cross spectra
     - Nbin (int): the number of bin for output Pk. If Nbin is None, then no 
     binning is done
     - scalebin (str): lin or log, the way the Pk is binned along k
@@ -600,8 +602,13 @@ def extract_pk3d(cube, proj_reso, los_reso,
     k3d_norm = np.sqrt(k3d_x**2 + k3d_y**2 + k3d_z**2)
     
     # Compute the Pk cube
-    fourier_cube = np.fft.fftn(cube)
-    fourier_pk = np.abs(fourier_cube)**2
+    if cube2 is None:
+        fourier_cube = np.fft.fftn(cube)
+        fourier_pk   = np.abs(fourier_cube)**2 # img unit squared
+    else:
+        fourier_c1 = np.fft.fftn(cube)
+        fourier_c2 = np.fft.fftn(cube2)
+        fourier_pk = np.real(fourier_c1*np.conjugate(fourier_c2)+np.conjugate(fourier_c1)*fourier_c2)/2
 
     # Get the flattened k, Pk
     knrm = k3d_norm.flatten()
@@ -650,6 +657,7 @@ def extract_pk3d(cube, proj_reso, los_reso,
 #==================================================
 
 def extract_pk2d(image, proj_reso,
+                 image2=None,
                  Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
                  statistic='mean'):
     """
@@ -659,8 +667,9 @@ def extract_pk2d(image, proj_reso,
     
     Parameters
     ----------
-    - image (np array): 2d data cube as nd array
+    - image (np array): 2d data image as nd array
     - proj_reso (float): the resolution along the projected direction (any unit, e.g. kpc, arcsec)
+    - image2 (np array): same as image. Use to do cross spectra
     - Nbin (int): the number of bin for output Pk. If Nbin is None, then no 
     binning is done
     - scalebin (str): lin or log, the way the Pk is binned along k
@@ -685,8 +694,13 @@ def extract_pk2d(image, proj_reso,
     k2d_norm = np.sqrt(k2d_x**2 + k2d_y**2)
     
     # Compute the Pk amplitide
-    fourier_img = np.fft.fftn(image)
-    fourier_pk = np.abs(fourier_img)**2 # img unit squared
+    if image2 is None:
+        fourier_img = np.fft.fftn(image)
+        fourier_pk = np.abs(fourier_img)**2 # img unit squared
+    else:
+        fourier_img1 = np.fft.fftn(image)
+        fourier_img2 = np.fft.fftn(image2)
+        fourier_pk = np.real(fourier_img1*np.conjugate(fourier_img2)+np.conjugate(fourier_img1)*fourier_img2)/2
 
     # Get the flattened k, Pk
     knrm = k2d_norm.flatten()
