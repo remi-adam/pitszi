@@ -1,6 +1,6 @@
 """
-This file contain the Inference class. 
-It is dedicated to extract constraints on model parameters.
+This file contain the InferenceFluctuation class. 
+It is dedicated to extract constraints on model fluctuation parameters.
 """
 
 #==================================================
@@ -22,18 +22,18 @@ from pitszi import utils
 from pitszi import utils_pk
 from pitszi import title
 
-from pitszi.inference_fitting import InferenceFitting
+from pitszi.inference_fluctuation_fitting import InferenceFluctuationFitting
 
 
 #==================================================
 # Inference class
 #==================================================
 
-class Inference(InferenceFitting):
+class InferenceFluctuation(InferenceFluctuationFitting):
     """ Inference class
-        This class infer the profile and power spectrum properties 
+        This class infer the pressure fluctuation power spectrum properties 
         given input data (from class Data()) and model (from class Model())
-        that are attributes
+        that are attributes.
 
     Attributes
     ----------
@@ -41,7 +41,6 @@ class Inference(InferenceFitting):
         - model (object from class Model()): the model object
 
         # Nuisance parameters
-        self.nuisance_ZL (float): nuisance parameter -- the map zero level
         self.nuisance_Anoise (float): nuisance parameter -- the amplitude of the noise
 
         # Binning in k
@@ -107,9 +106,6 @@ class Inference(InferenceFitting):
     - get_pk2d_model_statistics: compute the reference model statistical properties
     - get_pk2d_model_brute: compute the model in the brute force approach
     - get_pk2d_model_proj: compute the model in the projection case
-    - get_radial_data: get the data map in the case of the radial component (i.e. the y map)
-    - get_radial_noise_statistics: get the noise properties in the case of the radail component
-    - get_radial_model: compute the model in the case of the radial component
     - get_p3d_to_p2d_from_window_function: derive the window function to go from Pk3d to Pk2d
     - _get_p2d_from_p3d_from_window_function_exact: derive Pk2d given Pk3d by integration over the window function
     
@@ -123,7 +119,6 @@ class Inference(InferenceFitting):
                  data,
                  model,
                  #
-                 nuisance_ZL=0,
                  nuisance_Anoise=1,
                  #
                  kbin_min=0*u.arcsec**-1,
@@ -148,7 +143,7 @@ class Inference(InferenceFitting):
     ):
         """
         Initialize the inference object. 
-        All parameters can be changed on the fly.
+        All parameters can be changed on the fly, but changes might require to run the setup.
 
         List of caveats in model projection/deprojection from Pk3d
         ----------------------------------------------------------
@@ -180,7 +175,6 @@ class Inference(InferenceFitting):
         - data (pitszi Class Data object): the data
         - model (pitszi Class Model object): the model
         
-        - nuisance_ZL (float): map zero level, a nuisance parameter.
         - nuisance_Anoise (float): noise Pk amplitude, a nuisance parameter.
 
         - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
@@ -206,14 +200,13 @@ class Inference(InferenceFitting):
         """
 
         if not silent:
-            title.show_inference()
+            title.show_inference_fluctuation()
         
         #----- Input data and model (deepcopy to avoid modifying the input when fitting)
         self.data  = copy.deepcopy(data)
         self.model = copy.deepcopy(model)
 
         #----- Nuisance parameters
-        self.nuisance_ZL     = 0
         self.nuisance_Anoise = 1
 
         #----- Binning in k
@@ -1083,90 +1076,7 @@ class Inference(InferenceFitting):
         
         return k2d, pk2d_tot
     
-    
-    #==================================================
-    # Data for radial fit
-    #==================================================
-    
-    def get_radial_data(self):
-        """
-        This function returns the data to be compared with the model in the case of radial
-        fitting
-        
-        Parameters
-        ----------
-
-        Outputs
-        ----------
-        - image (2d np array): the data image
-
-        """
-
-        return self.data.image
-    
-    
-    #==================================================
-    # Noise for radial fit
-    #==================================================
-    
-    def get_radial_noise_statistics(self):
-        """
-        This function returns the noise properties in the case of radial
-        fitting
-        
-        Parameters
-        ----------
-
-        Outputs
-        ----------
-        - noise_rms (2d np array): the rms associated with the image
-        - noise_covmat (Npix**2 np array): the noise covariance matrix
-
-        """
-
-        noise_rms = self.data.noise_rms
-        if noise_rms is None:
-            raise ValueError("Noise rms not available in data. Please use the class Data() to define it")
-
-        if self.method_use_covmat:
-            noise_covmat = self.data.noise_covmat
-            if noise_covmat is None:
-                raise ValueError("Noise covariance not available in data. Use the class Data() to define it.")
-        else:
-            noise_covmat = None    
-
-        return noise_rms, noise_covmat
-    
-    
-    #==================================================
-    # Model for radial fit
-    #==================================================
-    
-    def get_radial_model(self):
-        """
-        This function returns the model to be compared to the data in the case of radial
-        fitting
-        
-        Parameters
-        ----------
-
-        Outputs
-        ----------
-        - model_image (2d np array): the model image
-
-        """
-
-        #----- Get the cluster model
-        model_img = self.model.get_sz_map(seed=None, no_fluctuations=True, force_isotropy=False,
-                                          irfs_convolution_beam=self.data.psf_fwhm,
-                                          irfs_convolution_TF=self.data.transfer_function)
-                
-        #----- Compute the final model
-        model_img = model_img + self.nuisance_ZL
-        
-        return model_img
-
-        
+            
     #==================================================
     # Window function
     #==================================================
