@@ -349,7 +349,8 @@ def apply_pk_transfer_function(k, pk, TF_k1, TF1,
 # Transfer function power spectrum deconvolution
 #==================================================
 
-def deconv_pk_transfer_function(k, pk, TF_k1, TF1):
+def deconv_pk_transfer_function(k, pk, TF_k1, TF1,
+                                TF_k2=None, TF2=None):
     """
     This function corrects the power spectrum from transfer 
     function attenuation.
