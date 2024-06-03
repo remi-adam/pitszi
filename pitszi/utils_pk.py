@@ -221,7 +221,7 @@ def deconv_transfer_function(image, reso, beamFWHM, TF, dec_TF_LS=True, dec_beam
 # Beam Power spectrum convolution
 #==================================================
 
-def apply_pk_beam(k, pk, beamFWHM):
+def apply_pk_beam(k, pk, beamFWHM1, beamFWHM2=None):
     """
     This function apply the power spectrum from beam 
     attenuation.
@@ -230,7 +230,8 @@ def apply_pk_beam(k, pk, beamFWHM):
     ----------
     - k (nd array): k array in inverse scale unit
     - pk (nd array): power spectrum array
-    - beamFWHM (quantity): the beam FWHM homogeneous to the inverse of k
+    - beamFWHM1 (quantity): the beam FWHM homogeneous to the inverse of k
+    - beamFWHM2 (quantity): the second beam FWHM in case pk is a cross between 2 maps with different beam
 
     Outputs
     ----------
@@ -238,11 +239,23 @@ def apply_pk_beam(k, pk, beamFWHM):
 
     """
 
-    if beamFWHM > 0:
-        Beam_k = beam_wf_pk(k, beamFWHM)
+    # Beam 1
+    if beamFWHM1 > 0:
+        Beam_k1 = beam_wf_pk(k, beamFWHM1)
     else:
-        Beam_k = 1
-    pk_conv = pk*Beam_k**2
+        Beam_k1 = 1
+
+    # Beam 2
+    if beamFWHM2 != None:
+        if beamFWHM2 > 0:
+            Beam_k2 = beam_wf_pk(k, beamFWHM2)
+        else:
+            Beam_k2 = 1
+    else:
+        Beam_k2 = Beam_k1
+
+    # Application
+    pk_conv = pk*Beam_k1*Beam_k2
 
     return pk_conv
 
@@ -251,7 +264,7 @@ def apply_pk_beam(k, pk, beamFWHM):
 # Beam Power spectrum deconvolution
 #==================================================
 
-def deconv_pk_beam(k, pk, beamFWHM):
+def deconv_pk_beam(k, pk, beamFWHM1, beamFWHM2=None):
     """
     This function corrects the power spectrum from beam 
     attenuation.
@@ -260,7 +273,8 @@ def deconv_pk_beam(k, pk, beamFWHM):
     ----------
     - k (nd array): k array in inverse scale unit
     - pk (nd array): power spectrum array
-    - beamFWHM (quantity): the beam FWHM homogeneous to the inverse of k
+    - beamFWHM1 (quantity): the beam FWHM homogeneous to the inverse of k
+    - beamFWHM2 (quantity): the second beam FWHM in case pk is a cross between 2 maps with different beam
 
     Outputs
     ----------
@@ -268,11 +282,23 @@ def deconv_pk_beam(k, pk, beamFWHM):
 
     """
 
-    if beamFWHM > 0:
-        Beam_k = beam_wf_pk(k, beamFWHM)
+    # Beam 1
+    if beamFWHM1 > 0:
+        Beam_k1 = beam_wf_pk(k, beamFWHM1)
     else:
-        Beam_k = 1
-    pk_deconv = pk/Beam_k**2
+        Beam_k1 = 1
+        
+    # Beam 2
+    if beamFWHM2 != None:
+        if beamFWHM2 > 0:
+            Beam_k2 = beam_wf_pk(k, beamFWHM2)
+        else:
+            Beam_k2 = 1
+    else:
+        Beam_k2 = Beam_k1
+
+    # Application
+    pk_deconv = pk/Beam_k1/Beam_k2
 
     return pk_deconv
 
@@ -281,7 +307,8 @@ def deconv_pk_beam(k, pk, beamFWHM):
 # Transfer function power spectrum convolution
 #==================================================
 
-def apply_pk_transfer_function(k, pk, TF_k, TF):
+def apply_pk_transfer_function(k, pk, TF_k1, TF1,
+                               TF_k2=None, TF2=None):
     """
     This function apply the power spectrum from transfer 
     function attenuation.
@@ -290,8 +317,10 @@ def apply_pk_transfer_function(k, pk, TF_k, TF):
     ----------
     - k (nd array): k array in the same unit as in the TF_k
     - pk (nd array): power spectrum array
-    - TF_k (nd array): k associated with the transfer function (same unit as k)
-    - TF (nd array): filtering (same lenght as TF_k)
+    - TF_k1 (nd array): k associated with the transfer function (same unit as k)
+    - TF1 (nd array): filtering (same lenght as TF_k)
+    - TF_k2 (nd array): same as TF_k1 in case of a second map with different TF
+    - TF2 (nd array): same as TF1 in case of a second map with different TF
 
     Outputs
     ----------
@@ -299,10 +328,19 @@ def apply_pk_transfer_function(k, pk, TF_k, TF):
 
     """
 
-    itpl = interp1d(TF_k, TF, bounds_error=False, fill_value=(0,1))
-    TF_kpc = itpl(k)
+    # TF1
+    itpl1 = interp1d(TF_k1, TF1, bounds_error=False, fill_value=(0,1))
+    TF_kpc1 = itpl1(k)
+
+    # TF2
+    if TF_k2 is not None and TF2 is not None:
+        itpl2 = interp1d(TF_k2, TF2, bounds_error=False, fill_value=(0,1))
+        TF_kpc2 = itpl2(k)
+    else:
+        TF_kpc2 = TF_kpc1
     
-    pk_conv = pk*TF_kpc**2
+    # Application
+    pk_conv = pk*TF_kpc1*TF_kpc2
     
     return pk_conv
 
@@ -311,7 +349,7 @@ def apply_pk_transfer_function(k, pk, TF_k, TF):
 # Transfer function power spectrum deconvolution
 #==================================================
 
-def deconv_pk_transfer_function(k, pk, TF_k, TF):
+def deconv_pk_transfer_function(k, pk, TF_k1, TF1):
     """
     This function corrects the power spectrum from transfer 
     function attenuation.
@@ -320,8 +358,10 @@ def deconv_pk_transfer_function(k, pk, TF_k, TF):
     ----------
     - k (nd array): k array in the same unit as in the TF_k
     - pk (nd array): power spectrum array
-    - TF_k (nd array): k associated with the transfer function (same unit as k)
-    - TF (nd array): filtering (same lenght as TF_k)
+    - TF_k1 (nd array): k associated with the transfer function (same unit as k)
+    - TF1 (nd array): filtering (same lenght as TF_k)
+    - TF_k2 (nd array): same as TF_k1 in case of a second map with different TF
+    - TF2 (nd array): same as TF1 in case of a second map with different TF
 
     Outputs
     ----------
@@ -329,10 +369,19 @@ def deconv_pk_transfer_function(k, pk, TF_k, TF):
 
     """
 
-    itpl = interp1d(TF_k, TF, bounds_error=False, fill_value=(0,1))
-    TF_kpc = itpl(k)
+    # TF1
+    itpl1 = interp1d(TF_k1, TF1, bounds_error=False, fill_value=(0,1))
+    TF_kpc1 = itpl1(k)
+
+    # TF2
+    if TF_k2 is not None and TF2 is not None:
+        itpl2 = interp1d(TF_k2, TF2, bounds_error=False, fill_value=(0,1))
+        TF_kpc2 = itpl2(k)
+    else:
+        TF_kpc2 = TF_kpc1
     
-    pk_deconv = pk/TF_kpc**2
+    # Application
+    pk_deconv = pk/TF_kpc1/TF_kpc2
     
     return pk_deconv
 

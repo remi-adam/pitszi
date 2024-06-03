@@ -37,7 +37,8 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
     Attributes
     ----------
-        - data (object from Class Data()): the data object
+        - data1 (object from Class Data()): the data object
+        - data2 (object from Class Data()): the secondary data object (used for cross spectra)
         - model (object from class Model()): the model object
 
         # Nuisance parameters
@@ -78,7 +79,8 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - _ymap_sph2 (2d array): the smooth ymap model (denominator)
         - _conv_wf (2d array): the pk3d to pk2d conversion window function
         - _conv_pk2d3d (float): the pk3d to pk2d conversion over the considered area
-        - _k2d_norm (2d array): the norm of k in a grid
+        - _k2d_norm_kpc (2d array): the norm of k in a grid in kpc
+        - _k2d_norm_arcsec (2d array): the norm of k in a grid in arcsec
         - _kedges_kpc (1d array): the edges of the k bin in kpc
         - _kedges_arcsec (1d array): the edges of the k bins in arcsec
         - _kctr_kpc (1d array): the center of the k bins in kpc
@@ -116,8 +118,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     #==================================================
 
     def __init__(self,
-                 data,
+                 data1,
                  model,
+                 data2=None,
                  #
                  nuisance_Anoise=1,
                  #
@@ -172,9 +175,10 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         
         Parameters
         ----------
-        - data (pitszi Class Data object): the data
+        - data1 (pitszi Class Data object): the data
         - model (pitszi Class Model object): the model
-        
+        - data2 (object from Class Data()): the secondary data object (used for cross spectra)
+
         - nuisance_Anoise (float): noise Pk amplitude, a nuisance parameter.
 
         - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
@@ -203,11 +207,22 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             title.show_inference_fluctuation()
         
         #----- Input data and model (deepcopy to avoid modifying the input when fitting)
-        self.data  = copy.deepcopy(data)
+        self.data1  = copy.deepcopy(data1)
         self.model = copy.deepcopy(model)
+        if data2 is not None:
+            self.data2 = copy.deepcopy(data2)
+            self._cross_spec = True        
+        else:
+            self.data2 = copy.deepcopy(data1)
+            self._cross_spec = False        
 
+        self._validate_data_and_model(silent)
+        
         #----- Nuisance parameters
-        self.nuisance_Anoise = 1
+        if data2 is not None:
+            self.nuisance_Anoise = 0 # As a reference no noise correlation in the two data
+        else:
+            self.nuisance_Anoise = 1 # The noise amplitude is one for a single auto spectrum
 
         #----- Binning in k
         self.kbin_min   = kbin_min
@@ -217,9 +232,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         
         #----- Analysis methodology
         self.method_use_covmat = method_use_covmat
-        self.method_parallel = method_parallel
+        self.method_parallel   = method_parallel
         if method_w8 == None:
-            self.method_w8 = np.ones(data.image.shape)   # The weight applied to image = dy/y x w8
+            self.method_w8 = np.ones(data1.image.shape)  # The weight applied to image = dy/y x w8
         else:
             self.method_w8 = method_w8
         self.method_data_deconv  = method_data_deconv    # Deconvolve the data from TF and beam prior Pk
@@ -236,22 +251,22 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self.silent     = silent
         self.output_dir = output_dir
 
-        #========== Usefull hidden variable to be computed on the fly
-        #----- Useful hiden parameters for radial profile
-        self._ymap_invcov        = None
-
-        #----- Useful hiden parameters for Pk fitting
+        #========== Usefull hidden variable to be computed on the fly        
         self._pk_setup_done      = False
         
         self._reso_arcsec        = None
         self._reso_kpc           = None
         self._kpc2arcsec         = None
                 
-        self._dy_image           = None
-        self._ymap_sph1          = None
-        self._ymap_sph2          = None
+        self._dy_image1          = None
+        self._ymap_sphA1         = None
+        self._ymap_sphB1         = None
+        self._dy_image2          = None
+        self._ymap_sphA2         = None
+        self._ymap_sphB2         = None
         
-        self._k2d_norm           = None
+        self._k2d_norm_kpc       = None
+        self._k2d_norm_arcsec    = None
         self._kedges_kpc         = None
         self._kedges_arcsec      = None
         self._kctr_kpc           = None
@@ -365,6 +380,46 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         
         
     #==================================================
+    # Validate data and model
+    #==================================================
+    
+    def _validate_data_and_model(self, silent):
+        """
+        Check that the data and the model are compatible in terms of sampling.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        
+        """
+        
+        h1 = self.data1.header
+        h2 = self.data2.header
+        h3 = self.model.get_map_header()
+        
+        c0  = h1['NAXIS']  == h2['NAXIS']  == h3['NAXIS']
+        c1  = h1['NAXIS1'] == h2['NAXIS1'] == h3['NAXIS1']
+        c2  = h1['NAXIS2'] == h2['NAXIS2'] == h3['NAXIS2']
+        c3  = h1['CRPIX1'] == h2['CRPIX1'] == h3['CRPIX1']
+        c4  = h1['CRPIX2'] == h2['CRPIX2'] == h3['CRPIX2']
+        c5  = h1['CRVAL1'] == h2['CRVAL1'] == h3['CRVAL1']
+        c6  = h1['CRVAL2'] == h2['CRVAL2'] == h3['CRVAL2']
+        c7  = h1['CDELT1'] == h2['CDELT1'] == h3['CDELT1']
+        c8  = h1['CDELT2'] == h2['CDELT2'] == h3['CDELT2']
+        c9  = h1['CTYPE1'] == h2['CTYPE1'] == h3['CTYPE1']
+        c10 = h1['CTYPE2'] == h2['CTYPE2'] == h3['CTYPE2']
+        
+        if c0 and c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8 and c9 and c10:
+            if not silent:
+                print('----- Checking the inputs -----')
+                print('      - Data1, data2, and model projection OK.')
+        else:
+            raise ValueError('The data1, data2 and model projection do not match.')
+
+        
+    #==================================================
     # Setup: preparation
     #==================================================
     
@@ -402,13 +457,16 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         
         #---------- ymaps
         if not self.silent: print('    * Setup imaging')
-
-        dy_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image()
         
-        self._ymap_sph1 = model_ymap_sph1
-        self._ymap_sph2 = model_ymap_sph2
-        self._dy_image  = dy_image
-
+        images = self.get_pk2d_data_image()
+        
+        self._dy_image1  = images[0]
+        self._ymap_sphA1 = images[1]
+        self._ymap_sphB1 = images[2]
+        self._dy_image2  = images[3]
+        self._ymap_sphA2 = images[4]
+        self._ymap_sphB2 = images[5]
+        
         #---------- Binning
         if not self.silent: print('    * Setup k binning')
 
@@ -416,12 +474,13 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         kedges_kpc    = self.get_kedges(physical=True)
         kedges_arcsec = self.get_kedges(physical=False)
         
-        self._k2d_norm      = k2d_norm.to_value('kpc-1')
-        self._kedges_kpc    = kedges_kpc.to_value('kpc-1')
-        self._kedges_arcsec = kedges_arcsec.to_value('arcsec-1')
-        self._kctr_kpc      = 0.5 * (self._kedges_kpc[1:] + self._kedges_kpc[:-1])
-        self._kctr_arcsec   = 0.5 * (self._kedges_arcsec[1:] + self._kedges_arcsec[:-1])
-        self._kcount        = self.get_kbin_counts()
+        self._k2d_norm_kpc    = k2d_norm.to_value('kpc-1')
+        self._k2d_norm_arcsec = k2d_norm.to_value('kpc-1') / self._kpc2arcsec
+        self._kedges_kpc      = kedges_kpc.to_value('kpc-1')
+        self._kedges_arcsec   = kedges_arcsec.to_value('arcsec-1')
+        self._kctr_kpc        = 0.5 * (self._kedges_kpc[1:] + self._kedges_kpc[:-1])
+        self._kctr_arcsec     = 0.5 * (self._kedges_arcsec[1:] + self._kedges_arcsec[:-1])
+        self._kcount          = self.get_kbin_counts()
         if not self.silent:
             print('      - Counts in each k bin:', self._kcount)
             print('      - Minimal count in k bins:', np.amin(self._kcount))
@@ -501,12 +560,14 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
         """
         
-        w8map = np.ones(self.data.image.shape)
+        w8map = np.ones(self.data1.image.shape)
 
         #===== Apply masks
+        # Mask associated with bad data
         if apply_data_mask:
-            w8map *= self.data.mask 
+            w8map *= (self.data1.mask * self.data2.mask)**0.5
 
+        # Mask associated with the region of interest
         if roi_mask is not None:
             w8map *= roi_mask
             
@@ -521,21 +582,28 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
             # Extract the model accounting for beam and TF
             if conv_radial_model_beam:
-                the_beam = self.data.psf_fwhm
+                the_beam1 = self.data1.psf_fwhm
+                the_beam2 = self.data2.psf_fwhm
             else:
-                the_beam = None
+                the_beam1 = None
+                the_beam2 = None
 
             if conv_radial_model_TF:
-                the_tf   = self.data.transfer_function
+                the_tf1   = self.data1.transfer_function
+                the_tf2   = self.data2.transfer_function
             else:
-                the_tf   = None
+                the_tf1   = None
+                the_tf2   = None
                 
-            radial_model = tmp_mod.get_sz_map(no_fluctuations=True,
-                                              irfs_convolution_beam=the_beam,
-                                              irfs_convolution_TF=the_tf)
+            radial_model1 = tmp_mod.get_sz_map(no_fluctuations=True,
+                                               irfs_convolution_beam=the_beam1,
+                                               irfs_convolution_TF=the_tf1)
+            radial_model2 = tmp_mod.get_sz_map(no_fluctuations=True,
+                                               irfs_convolution_beam=the_beam2,
+                                               irfs_convolution_TF=the_tf2)
             
             # Apply radial model
-            w8map *= radial_model
+            w8map *= (radial_model1 * radial_model2)**0.5
 
         # Smoothing
         if smooth_FWHM>0:
@@ -567,7 +635,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         """
 
         # Define the grid size
-        Ny, Nx = self.data.image.shape
+        Ny, Nx = self.data1.image.shape
 
         # Get the resolution in the right unit (physical or angle)
         if physical:
@@ -680,43 +748,62 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         This function compute the image used in the Pk analysis, 
         and also returns the smooth ymaps used in the ratio:
 
-        dy_image = (y - model_ymap_sph1) / model_ymap_sph2
+        dy_image = (y - model_ymap_sphA) / model_ymap_sphB
         
         Parameters
         ----------
         
         Outputs
         ----------
-        - dy_image (2d array): image use for Pk analysis
-        - model_ymap_sph1 (2d array): smooth model numerator
-        - model_ymap_sph2 (2d array): smooth model denominator
-
+        - dy_image1 (2d array): image use for Pk analysis corresponding to data1
+        - model_ymap_sphA1 (2d array): smooth model numerator data1
+        - model_ymap_sphB1 (2d array): smooth model denominator data1
+        - dy_image2 (2d array): image use for Pk analysis corresponding to data2
+        - model_ymap_sphA2 (2d array): smooth model numerator data2
+        - model_ymap_sphB2 (2d array): smooth model denominator data2
         """
         
         #---------- Get the smooth model and the data image
         if self.method_data_deconv:
-            img_y = utils_pk.deconv_transfer_function(self.data.image,
-                                                      self.model.get_map_reso().to_value('arcsec'), 
-                                                      self.data.psf_fwhm.to_value('arcsec'),
-                                                      self.data.transfer_function, 
-                                                      dec_TF_LS=True, dec_beam=True)
-            model_ymap_sph1 = self.model.get_sz_map(no_fluctuations=True)
-            model_ymap_sph2 = model_ymap_sph1
+            img_y1 = utils_pk.deconv_transfer_function(self.data1.image,
+                                                       self.model.get_map_reso().to_value('arcsec'), 
+                                                       self.data1.psf_fwhm.to_value('arcsec'),
+                                                       self.data1.transfer_function, 
+                                                       dec_TF_LS=True, dec_beam=True)
+            img_y2 = utils_pk.deconv_transfer_function(self.data2.image,
+                                                       self.model.get_map_reso().to_value('arcsec'), 
+                                                       self.data2.psf_fwhm.to_value('arcsec'),
+                                                       self.data2.transfer_function, 
+                                                       dec_TF_LS=True, dec_beam=True)
+            model_ymap_sphA1 = self.model.get_sz_map(no_fluctuations=True)
+            model_ymap_sphA2 = model_ymap_sph1
+            model_ymap_sphB1 = model_ymap_sph1
+            model_ymap_sphB2 = model_ymap_sph1
             
         else:
-            img_y = self.data.image
-            model_ymap_sph1 = self.model.get_sz_map(no_fluctuations=True,
-                                                    irfs_convolution_beam=self.data.psf_fwhm,
-                                                    irfs_convolution_TF=self.data.transfer_function)    
-            model_ymap_sph2 = self.model.get_sz_map(no_fluctuations=True,
-                                                    irfs_convolution_beam=self.data.psf_fwhm) 
-        
+            img_y1 = self.data1.image
+            img_y2 = self.data2.image
+            model_ymap_sphA1 = self.model.get_sz_map(no_fluctuations=True,
+                                                     irfs_convolution_beam=self.data1.psf_fwhm,
+                                                     irfs_convolution_TF=self.data1.transfer_function)    
+            model_ymap_sphA2 = self.model.get_sz_map(no_fluctuations=True,
+                                                     irfs_convolution_beam=self.data2.psf_fwhm,
+                                                     irfs_convolution_TF=self.data2.transfer_function)
+            
+            model_ymap_sphB1 = self.model.get_sz_map(no_fluctuations=True,
+                                                     irfs_convolution_beam=self.data1.psf_fwhm)
+            model_ymap_sphB2 = self.model.get_sz_map(no_fluctuations=True,
+                                                     irfs_convolution_beam=self.data2.psf_fwhm)            
+            
         #---------- Compute the data to be used for Pk
-        delta_y    = img_y - model_ymap_sph1
-        dy_image = (delta_y - np.mean(delta_y)) / model_ymap_sph2 * self.method_w8
-        dy_image[model_ymap_sph2 <=0] = 0 # Ensure that bad pixels are set to zero, e.g. beyond R_trunc
+        delta_y1    = img_y1 - model_ymap_sphA1
+        delta_y2    = img_y2 - model_ymap_sphA2
+        dy_image1 = (delta_y1 - np.mean(delta_y1)) / model_ymap_sphB1 * self.method_w8
+        dy_image2 = (delta_y2 - np.mean(delta_y2)) / model_ymap_sphB2 * self.method_w8
+        dy_image1[model_ymap_sphB1 <=0] = 0 # Ensure that bad pixels are set to zero, e.g. beyond R_trunc
+        dy_image2[model_ymap_sphB2 <=0] = 0
         
-        return dy_image, model_ymap_sph1, model_ymap_sph2
+        return dy_image1, model_ymap_sphA1, model_ymap_sphB1, dy_image2, model_ymap_sphA2, model_ymap_sphB2
     
     
     #==================================================
@@ -740,12 +827,12 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         """
 
         #---------- Compute the data to be used for Pk
-        dy_image, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image() 
+        dy1, _, _, dy2, _, _ = self.get_pk2d_data_image() 
         
         #---------- Pk for the data
         kedges = self.get_kedges().to_value('arcsec-1')
         reso   = self.model.get_map_reso().to_value('arcsec')
-        k2d, data_pk2d = utils_pk.extract_pk2d(dy_image, reso, kedges=kedges)
+        k2d, data_pk2d = utils_pk.extract_pk2d(dy1, reso, image2=dy2, kedges=kedges)
 
         #---------- Units
         if physical:
@@ -793,23 +880,25 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         reso   = self.model.get_map_reso().to_value('arcsec')
 
         #----- Model accounting/or not for beam and TF
-        _, _, model_ymap_sph2 = self.get_pk2d_data_image()
+        _, _, model_ymap_sphB1, _, _, model_ymap_sphB2 = self.get_pk2d_data_image()
 
         #----- Extract noise MC realization
-        noise_ymap_mc = self.data.noise_mc
-        Nmc0 = noise_ymap_mc.shape[0]
-        if noise_ymap_mc is None:
+        noise_ymap_mc1 = self.data1.noise_mc
+        noise_ymap_mc2 = self.data2.noise_mc
+        Nmc01 = noise_ymap_mc1.shape[0]
+        Nmc02 = noise_ymap_mc2.shape[0]
+        if noise_ymap_mc1 is None or noise_ymap_mc2 is None:
             raise ValueError("Noise MC not available in data. Please use the class Data() to define it.")
-        if Nmc0 < 100 and not self.silent:
+        if (Nmc01 < 100 or Nmc02 < 100) and not self.silent:
             print('WARNING: the number of MC realizations to use is less than 100. This might not be enough.')
 
-        # Redefine the number of Mc upon request
+        # Redefine the number of MC upon request
         if Nmc is not None:
-            if Nmc0 < Nmc: # just use Nmc0 if the requested number of MC is larger than available
-                Nmc = Nmc0
-                print('WARNING: the number requested number of MC realizations is larger than what is available in Data().')
+            if Nmc01 < Nmc or Nmc02 < Nmc: # just use Nmc0 if the requested number of MC is larger than available
+                Nmc = np.amin(np.array([Nmc01, Nmc02]))
+                print('WARNING: the requested number of MC realizations is larger than what is available in data')
         else:
-            Nmc = Nmc0
+            Nmc = np.amin(np.array([Nmc01, Nmc02]))
 
         #----- Compute Pk2d MC realization
         noise_pk2d_mc = np.zeros((Nmc, len(kedges)-1))
@@ -817,18 +906,27 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             
             # Account for deconvolution choices
             if self.method_data_deconv:
-                img_y = utils_pk.deconv_transfer_function(noise_ymap_mc[imc,:,:],
-                                                          self.model.get_map_reso().to_value('arcsec'), 
-                                                          self.data.psf_fwhm.to_value('arcsec'),
-                                                          self.data.transfer_function, 
-                                                          dec_TF_LS=True, dec_beam=True)
+                img_y1 = utils_pk.deconv_transfer_function(noise_ymap_mc1[imc,:,:],
+                                                           self.model.get_map_reso().to_value('arcsec'), 
+                                                           self.data1.psf_fwhm.to_value('arcsec'),
+                                                           self.data1.transfer_function, 
+                                                           dec_TF_LS=True, dec_beam=True)
+                img_y2 = utils_pk.deconv_transfer_function(noise_ymap_mc2[imc,:,:],
+                                                           self.model.get_map_reso().to_value('arcsec'), 
+                                                           self.data2.psf_fwhm.to_value('arcsec'),
+                                                           self.data2.transfer_function, 
+                                                           dec_TF_LS=True, dec_beam=True)
             else:
-                img_y = noise_ymap_mc[imc,:,:]
+                img_y1 = noise_ymap_mc1[imc,:,:]
+                img_y2 = noise_ymap_mc2[imc,:,:]
                 
             # Noise to Pk
-            image_noise_mc = (img_y - np.mean(img_y))/model_ymap_sph2 * self.method_w8
-            image_noise_mc[model_ymap_sph2 <= 0] = 0
-            k2d, pk_mc =  utils_pk.extract_pk2d(image_noise_mc, reso, kedges=kedges)
+            image_noise_mc1 = (img_y1 - np.mean(img_y1))/model_ymap_sphB1 * self.method_w8
+            image_noise_mc2 = (img_y2 - np.mean(img_y2))/model_ymap_sphB2 * self.method_w8
+            image_noise_mc1[model_ymap_sphB1 <= 0] = 0
+            image_noise_mc2[model_ymap_sphB2 <= 0] = 0
+            
+            k2d, pk_mc =  utils_pk.extract_pk2d(image_noise_mc1, reso, image2=image_noise_mc2, kedges=kedges)
             noise_pk2d_mc[imc,:] = pk_mc
             
         # Noise statistics
@@ -869,8 +967,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     
     def get_pk2d_model_statistics(self,
                                   Nmc=1000,
-                                  physical=False,
-                                  seed=None):
+                                  physical=False):
         """
         This function compute the model variance properties associated
         with the reference input model.
@@ -879,7 +976,6 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         ----------
         - Nmc (int): number of monte carlo realization
         - physical (bool): set to true to have output in kpc units, else arcsec units
-        - seed (int): fluctuation seed for reproducible results
 
         Outputs
         ----------
@@ -899,7 +995,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         reso   = self.model.get_map_reso().to_value('arcsec')
 
         #----- Model accounting/or not for beam and TF
-        _, model_ymap_sph1, model_ymap_sph2 = self.get_pk2d_data_image()
+        _, model_ymap_sphA1, model_ymap_sphB1, _, model_ymap_sphA2, model_ymap_sphB2  = self.get_pk2d_data_image()
         
         #----- Compute Pk2d MC realization
         model_pk2d_mc     = np.zeros((Nmc, len(kedges)-1))
@@ -909,19 +1005,30 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
             # Account or not for TF and beam
             if self.method_data_deconv:
-                test_ymap = self.model.get_sz_map(seed=seed, no_fluctuations=False)
+                test_ymap1 = self.model.get_sz_map(no_fluctuations=False)
+                test_ymap2 = test_ymap1
             else:
-                test_ymap = self.model.get_sz_map(seed=seed, no_fluctuations=False,
-                                                  irfs_convolution_beam=self.data.psf_fwhm,
-                                                  irfs_convolution_TF=self.data.transfer_function)
-
+                seed = int(np.random.uniform(0,1000000))
+                test_ymap1 = self.model.get_sz_map(seed=seed, no_fluctuations=False,
+                                                   irfs_convolution_beam=self.data1.psf_fwhm,
+                                                   irfs_convolution_TF=self.data1.transfer_function)
+                if self._cross_spec:
+                    test_ymap2 = self.model.get_sz_map(seed=seed, no_fluctuations=False,
+                                                       irfs_convolution_beam=self.data2.psf_fwhm,
+                                                       irfs_convolution_TF=self.data2.transfer_function)
+                else:
+                    test_ymap2 = test_ymap1
+                
             # Test image
-            delta_y = test_ymap - model_ymap_sph1
-            test_image = (delta_y - np.mean(delta_y))/model_ymap_sph2 * self.method_w8
-            test_image[model_ymap_sph2 <= 0] = 0
+            delta_y1 = test_ymap1 - model_ymap_sphA1
+            delta_y2 = test_ymap2 - model_ymap_sphA2
+            test_image1 = (delta_y1 - np.mean(delta_y1))/model_ymap_sphB1 * self.method_w8
+            test_image2 = (delta_y2 - np.mean(delta_y2))/model_ymap_sphB2 * self.method_w8
+            test_image1[model_ymap_sphB1 <= 0] = 0
+            test_image2[model_ymap_sphB2 <= 0] = 0
 
             # Pk
-            k2d, pk_mc =  utils_pk.extract_pk2d(test_image, reso, kedges=kedges)
+            k2d, pk_mc =  utils_pk.extract_pk2d(test_image1, reso, image2=test_image2, kedges=kedges)
             model_pk2d_mc[imc,:] = pk_mc
 
         # Model statistics
@@ -961,7 +1068,6 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     #==================================================
     
     def get_pk2d_model_brute(self,
-                             seed=None,
                              physical=False):
         """
         This function returns the model of pk for the brute force
@@ -970,7 +1076,6 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         Parameters
         ----------
         - physical (bool): set to true to have output in kpc units, else arcsec units
-        - seed (int): fluctuation seed for reproducible results
 
         Outputs
         ----------
@@ -984,9 +1089,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
-        k2d, pk2d_modvar, _ = self.get_pk2d_model_statistics(physical=physical,
-                                                             Nmc=1,
-                                                             seed=seed)
+        k2d, pk2d_modvar, _ = self.get_pk2d_model_statistics(physical=physical, Nmc=1)
 
         #----- Compute the final model
         pk_noise = self._pk2d_noise # baseline is kpc2
@@ -1026,8 +1129,8 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
-        Ny, Nx   = self._k2d_norm.shape
-        k2d_flat = self._k2d_norm.flatten()
+        Ny, Nx   = self._k2d_norm_kpc.shape
+        k2d_flat = self._k2d_norm_kpc.flatten()
 
         # Projection
         idx_sort = np.argsort(k2d_flat)
@@ -1043,11 +1146,15 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         pk2d_flat = pk3d_test * self._conv_pk2d3d # Unit == kpc2, 2d grid
 
         # Beam and TF
-        beam  = self.data.psf_fwhm.to_value('rad')*self.model.D_ang.to_value('kpc')
-        TF_k  = self.data.transfer_function['k'].to_value('rad-1') / self.model.D_ang.to_value('kpc')
-        TF_tf = self.data.transfer_function['TF']
-        pk2d_flat = utils_pk.apply_pk_beam(k2d_flat, pk2d_flat, beam)
-        pk2d_flat = utils_pk.apply_pk_transfer_function(k2d_flat, pk2d_flat, TF_k, TF_tf)
+        beam1  = self.data1.psf_fwhm.to_value('rad')*self.model.D_ang.to_value('kpc')
+        TF_k1  = self.data1.transfer_function['k'].to_value('rad-1') / self.model.D_ang.to_value('kpc')
+        TF_tf1 = self.data1.transfer_function['TF']
+        beam2  = self.data2.psf_fwhm.to_value('rad')*self.model.D_ang.to_value('kpc')
+        TF_k2  = self.data2.transfer_function['k'].to_value('rad-1') / self.model.D_ang.to_value('kpc')
+        TF_tf2 = self.data2.transfer_function['TF']
+        pk2d_flat = utils_pk.apply_pk_beam(k2d_flat, pk2d_flat, beam1, beamFWHM2=beam2)
+        pk2d_flat = utils_pk.apply_pk_transfer_function(k2d_flat, pk2d_flat, TF_k1, TF_tf1,
+                                                        TF_k2=TF_k2, TF2=TF_tf2)
     
         # Apply Kmn (multiply_Kmnmn_bis, i.e. without loop, is slower)
         pk2d_K = np.abs(utils_pk.multiply_Kmnmn(np.abs(self._Kmnmn)**2,
@@ -1192,10 +1299,11 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         #Pk2d_xy = utils.trapz_loglog(integrand, k_z_sort, axis=4) #kx, ky, x, y
         #mask_kxky = self.data.mask[np.newaxis, np.newaxis, :,:]
         #Pk2d_exact = np.sum(Pk2d_xy * mask_kxky, axis=(2,3)) / np.sum(mask_kxky, axis=(2,3)) #kpc2
+        mask = (self.data1.mask * self.data2.mask)**0.5
         for ik in range(Ny):
             for jk in range(Nx):
                 integrand = P3d_kzsort[:,ik,jk,np.newaxis,np.newaxis]*W_ft_sort
                 Pk2d_ikjk_xy = utils.trapz_loglog(integrand, k_z_sort, axis=0)
-                Pk2d[ik,jk] = np.sum(Pk2d_ikjk_xy * self.data.mask) / np.sum(self.data.mask)
+                Pk2d[ik,jk] = np.sum(Pk2d_ikjk_xy * mask) / np.sum(mask)
 
         return k2d_norm*u.kpc**-1, Pk2d*u.kpc**2
