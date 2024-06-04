@@ -906,8 +906,8 @@ def show_fit_result_pk2d(figfile,
     plt.yscale('log')
     plt.xlim(np.amin(k2d)*0.9, np.amax(k2d)*1.1)
     
-    plt.ylim(np.amax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*1e-3,
-             np.amax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*5)
+    plt.ylim(np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*1e-3,
+             np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*5)
     
     plt.legend(fontsize=12)
     plt.savefig(figfile)

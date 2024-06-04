@@ -671,14 +671,16 @@ class InferenceFluctuationFitting(object):
         """
 
         #========== Get noise MC 
-        noise_mc = self.data.noise_mc
-        if noise_mc.shape[0] > self.mcmc_Nresamp:
+        noise_mc1 = self.data1.noise_mc
+        noise_mc2 = self.data2.noise_mc
+        if noise_mc1.shape[0] > self.mcmc_Nresamp or noise_mc2.shape[0] > self.mcmc_Nresamp:
             Nmc = self.mcmc_Nresamp
-            noise_mc = noise_mc[0:Nmc]
+            noise_mc1 = noise_mc1[0:Nmc]
+            noise_mc2 = noise_mc2[0:Nmc]
         else:
-            Nmc = noise_mc.shape[0]
+            Nmc = np.amin(np.array([noise_mc1.shape[0], noise_mc2.shape[0]]))
             if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
-
+            
         #========== Get the best-fit
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.setpar_fluctuation(best_par, parinfo)
@@ -709,15 +711,25 @@ class InferenceFluctuationFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image.pdf',
-                                         self.data.image,
-                                         self._dy_image,
-                                         self._ymap_sph1,
-                                         self._ymap_sph2,
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image1.pdf',
+                                         self.data1.image,
+                                         self._dy_image1,
+                                         self._ymap_sphA1,
+                                         self._ymap_sphB1,
                                          self.method_w8,
-                                         self.data.header,
-                                         noise_mc,
-                                         mask=self.data.mask,
+                                         self.data1.header,
+                                         noise_mc1,
+                                         mask=self.data1.mask,
+                                         visu_smooth=10)
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image2.pdf',
+                                         self.data2.image,
+                                         self._dy_image2,
+                                         self._ymap_sphA2,
+                                         self._ymap_sphB2,
+                                         self.method_w8,
+                                         self.data2.header,
+                                         noise_mc2,
+                                         mask=self.data2.mask,
                                          visu_smooth=10)
         
         #========== Plot the covariance matrix
@@ -867,12 +879,14 @@ class InferenceFluctuationFitting(object):
         """
 
         #========== Get noise MC 
-        noise_mc = self.data.noise_mc
-        if noise_mc.shape[0] > self.mcmc_Nresamp:
+        noise_mc1 = self.data1.noise_mc
+        noise_mc2 = self.data2.noise_mc
+        if noise_mc1.shape[0] > self.mcmc_Nresamp or noise_mc2.shape[0] > self.mcmc_Nresamp:
             Nmc = self.mcmc_Nresamp
-            noise_mc = noise_mc[0:Nmc]
+            noise_mc1 = noise_mc1[0:Nmc]
+            noise_mc2 = noise_mc2[0:Nmc]
         else:
-            Nmc = noise_mc.shape[0]
+            Nmc = np.amin(np.array([noise_mc1.shape[0], noise_mc2.shape[0]]))
             if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
 
         #========== Get the best-fit
@@ -911,15 +925,25 @@ class InferenceFluctuationFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image.pdf',
-                                         self.data.image,
-                                         self._dy_image,
-                                         self._ymap_sph1,
-                                         self._ymap_sph2,
+        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image1.pdf',
+                                         self.data1.image,
+                                         self._dy_image1,
+                                         self._ymap_sphA1,
+                                         self._ymap_sphB1,
                                          self.method_w8,
-                                         self.data.header,
-                                         noise_mc,
-                                         mask=self.data.mask,
+                                         self.data1.header,
+                                         noise_mc1,
+                                         mask=self.data1.mask,
+                                         visu_smooth=10)
+        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image2.pdf',
+                                         self.data2.image,
+                                         self._dy_image2,
+                                         self._ymap_sphA2,
+                                         self._ymap_sphB2,
+                                         self.method_w8,
+                                         self.data2.header,
+                                         noise_mc2,
+                                         mask=self.data2.mask,
                                          visu_smooth=10)
         
         #========== Plot the covariance matrix
