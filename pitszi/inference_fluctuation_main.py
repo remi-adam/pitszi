@@ -223,7 +223,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             self.nuisance_Anoise = 0 # As a reference no noise correlation in the two data
         else:
             self.nuisance_Anoise = 1 # The noise amplitude is one for a single auto spectrum
-
+            
         #----- Binning in k
         self.kbin_min   = kbin_min
         self.kbin_max   = kbin_max
