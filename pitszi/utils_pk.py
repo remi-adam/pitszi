@@ -801,7 +801,8 @@ def extract_pk2d(image, proj_reso,
 def extract_pk2d_arevalo(image, proj_reso,
                          kctr=None,
                          Nbin=100, scalebin='lin', kmin=None, kmax=None, kedges=None,
-                         epsilon=1e-3, mask=None, unbias=False):
+                         epsilon=1e-3, mask=None,
+                         unbias_apply=False, unbias_slope=None, unbias_beamFWHM=0):
     """
     Implement the method of Arevalo et al. (2012) to compute the power spectrum.
     Warning, the method is biased for steep spectra, which is the case 
@@ -811,7 +812,7 @@ def extract_pk2d_arevalo(image, proj_reso,
     The unit of output k is the same as the inverse of the resolution, and that of Pk 
     is the same as resolution^2.
     
-    See also Romero et al. (2023) for the bias estimate due to the PSF.
+    See also Romero et al. (2023) and its erratum for the bias estimate due to the PSF.
 
     Parameters
     ----------
@@ -826,8 +827,11 @@ def extract_pk2d_arevalo(image, proj_reso,
       Nbin, kmin/kmax and scalebin are ignored)
     - epsilon (float): parameter of the sigma calculation
     - mask (nd array): same size as image, but with 0 or 1 to mask bad pixels
-    - unbias (bool): set to true to unbias the spectrum given the estimated power law bias
+    - unbias_apply (bool): set to true to unbias the spectrum given the estimated power law bias
     using the first guess measured spectrum as the input
+    - unbias_slope (float or array with lenght Nbin): the slope of the underlying true spectrum 
+    needed for debiasing
+    - unbias_beamFWHM (float): the Gaussian beam FWHM (same unit as proj_reso)
 
     Outputs
     ----------
@@ -910,10 +914,24 @@ def extract_pk2d_arevalo(image, proj_reso,
     Pk = np.array(Pk)
 
     #----- Attempt to unbias the spectrum
-    if unbias:
-        der = -np.gradient(np.log10(Pk), np.log10(k2d))
-        bias = 2**(der/2) * gamma(3 - der/2) / gamma(3)
-        Pk = Pk/bias
+    if unbias_apply:
+        # Compute the slope from the spectrum itself if not provided (i.e. do what you can)
+        if unbias_slope is None:
+            der = -np.gradient(np.log10(Pk), np.log10(k2d))
+        else:
+            der = unbias_slope
+        biasPL = 2**(der/2) * gamma(3 - der/2) / gamma(3)
+        
+        # Compute the beam smoothing bias correction
+        if unbias_beamFWHM > 0:
+            sigma_i = unbias_beamFWHM/sigma2fwhm
+            k_i = 1 / (np.sqrt(2) * np.pi * sigma_i)
+            x_i = k_i / k2d
+            biasB = (1 + 1/x_i**2)**(-3+der/2)
+        else:
+            biasB = 1
+        
+        Pk = Pk/(biasPL*biasB)
 
     return k2d, Pk
 
