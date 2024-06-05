@@ -51,7 +51,7 @@ class InferenceFluctuationFitting(object):
                                        sampler,
                                        conf=68.0,
                                        truth=None,
-                                       extraname=''):
+                                       extname=''):
         """
         This function can be used to produce automated plots/files
         that give the results of the MCMC samping
@@ -62,7 +62,7 @@ class InferenceFluctuationFitting(object):
         - sampler (emcee object): the sampler
         - conf (float): confidence limit in % used in results
         - truth (list): the list of expected parameter value for the fit
-        - extraname (string): extra name to add after MCMC in file name
+        - extname (string): extra name to add after MCMC in file name
 
         Outputs
         ----------
@@ -91,25 +91,25 @@ class InferenceFluctuationFitting(object):
         utils_fitting.chains_statistics(par_chains, lnl_chains,
                                         parname=parlist,
                                         conf=conf,
-                                        outfile=self.output_dir+'/MCMC'+extraname+'_chain_statistics.txt')
+                                        outfile=self.output_dir+'/MCMC'+extname+'_chain_statistics.txt')
 
         #---------- Produce 1D plots of the chains
-        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extraname+'_chain_1d_plot.pdf')
+        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extname+'_chain_1d_plot.pdf')
         
         #---------- Produce 1D histogram of the chains
-        namefiles = [self.output_dir+'/MCMC'+extraname+'_chain_hist_'+i+'.pdf' for i in parlist]
+        namefiles = [self.output_dir+'/MCMC'+extname+'_chain_hist_'+i+'.pdf' for i in parlist]
         utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
                                  conf=conf, truth=truth)
 
         #---------- Produce 2D (corner) plots of the chains
         utils_plot.chains_2Dplots_corner(par_chains,
                                          parlist,
-                                         self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_corner.pdf',
+                                         self.output_dir+'/MCMC'+extname+'_chain_2d_plot_corner.pdf',
                                          truth=truth)
 
         #utils_plot.chuains_2Dplots_sns(par_chains,
         #                              parlist,
-        #                              self.output_dir+'/MCMC'+extraname+'_chain_2d_plot_sns.pdf',
+        #                              self.output_dir+'/MCMC'+extname+'_chain_2d_plot_sns.pdf',
         #                              truth=truth)
     
 
@@ -123,7 +123,7 @@ class InferenceFluctuationFitting(object):
                                      popt, pcov,
                                      conf=68.0,
                                      truth=None,
-                                     extraname='',
+                                     extname='',
                                      Nsample=10000):
         """
         This function can be used to produce automated plots/files
@@ -136,7 +136,7 @@ class InferenceFluctuationFitting(object):
         - pcov (2d array): posterior covariance matrix
         - conf (float): confidence limit in % used in results
         - truth (list): the list of expected parameter value for the fit
-        - extraname (string): extra name to add after MCMC in file name
+        - extname (string): extra name to add after MCMC in file name
 
         Outputs
         ----------
@@ -172,25 +172,25 @@ class InferenceFluctuationFitting(object):
         utils_fitting.chains_statistics(par_chains, lnl_chains,
                                         parname=parlist,
                                         conf=conf,
-                                        outfile=self.output_dir+'/CurveFit'+extraname+'_statistics.txt')
+                                        outfile=self.output_dir+'/CurveFit'+extname+'_statistics.txt')
             
         #---------- Produce 1D plots of the chains
-        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/CurveFit'+extraname+'_1d_plot.pdf')
+        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/CurveFit'+extname+'_1d_plot.pdf')
         
         #---------- Produce 1D histogram of the chains
-        namefiles = [self.output_dir+'/CurveFit'+extraname+'_hist_'+i+'.pdf' for i in parlist]
+        namefiles = [self.output_dir+'/CurveFit'+extname+'_hist_'+i+'.pdf' for i in parlist]
         utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
                                  conf=conf, truth=truth)
 
         #---------- Produce 2D (corner) plots of the chains
         utils_plot.chains_2Dplots_corner(par_chains,
                                          parlist,
-                                         self.output_dir+'/CurveFit'+extraname+'_2d_plot_corner.pdf',
+                                         self.output_dir+'/CurveFit'+extname+'_2d_plot_corner.pdf',
                                          truth=truth)
 
         #utils_plot.chains_2Dplots_sns(par_chains,
         #                              parlist,
-        #                              self.output_dir+'/CurveFit'+extraname+'_2d_plot_sns.pdf',
+        #                              self.output_dir+'/CurveFit'+extname+'_2d_plot_sns.pdf',
         #                              truth=truth)
     
         
@@ -233,6 +233,7 @@ class InferenceFluctuationFitting(object):
         # remove unwanted keys
         parinfo_fluct = copy.deepcopy(parinfo)
         if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+        if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
         
         # Loop over the keys
         Npar_fluct = len(list(parinfo_fluct.keys()))
@@ -267,7 +268,7 @@ class InferenceFluctuationFitting(object):
                 par_max.append(+np.inf)
 
         #========== Noise ampli
-        list_nuisance_allowed = ['Anoise']
+        list_nuisance_allowed = ['Anoise', 'Abkg']
         parinfo_nuisance = {key: parinfo[key] for key in list_nuisance_allowed if key in parinfo.keys()}
         Npar_nuisance = len(list(parinfo_nuisance.keys()))
     
@@ -337,6 +338,7 @@ class InferenceFluctuationFitting(object):
         # remove unwanted keys
         parinfo_fluct = copy.deepcopy(parinfo)
         if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+        if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
 
         # Loop over the keys
         parkeys_fluct = list(parinfo_fluct.keys())
@@ -361,7 +363,7 @@ class InferenceFluctuationFitting(object):
             idx_par += 1
 
         #========== Other parameters
-        list_allowed  = ['Anoise']
+        list_allowed  = ['Anoise', 'Abkg']
         parinfo_other = {key: parinfo[key] for key in list_allowed if key in parinfo.keys()}        
         parkeys_other = list(parinfo_other.keys())
         Npar_other    = len(parkeys_other)
@@ -421,6 +423,7 @@ class InferenceFluctuationFitting(object):
         # remove unwanted keys
         parinfo_fluct = copy.deepcopy(parinfo)
         if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
+        if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
         parkeys_fluct = list(parinfo_fluct.keys())
 
         # Loop Fluctuation
@@ -433,9 +436,12 @@ class InferenceFluctuationFitting(object):
             self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
             idx_par += 1
 
-        #========== Noise amplitude
+        #========== Noise and background amplitude
         if 'Anoise' in parkeys:
             self.nuisance_Anoise = param[idx_par]
+            idx_par += 1
+        if 'Abkg' in parkeys:
+            self.nuisance_Abkg = param[idx_par]
             idx_par += 1
 
         #========== Final check on parameter count
@@ -486,11 +492,13 @@ class InferenceFluctuationFitting(object):
         residual_test = self._pk2d_data - pk2d_test
         
         if self.method_use_covmat:
-            if kind == 'brute':      inverse_cov = self._pk2d_totref_invcov
-            if kind == 'projection': inverse_cov = self._pk2d_noise_invcov
+            if kind == 'brute':      inverse_cov = self._pk2d_invcov_totref
+            if kind == 'projection': inverse_cov = self._pk2d_invcov
         else:
-            if kind == 'brute':      variance = self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2
-            if kind == 'projection': variance = self._pk2d_noise_rms**2
+            if kind == 'brute':
+                variance = self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2 + self._pk2d_bkg_rms**2
+            if kind == 'projection':
+                variance = self._pk2d_noise_rms**2 + self._pk2d_bkg_rms**2
         
         # compute lnL
         if self.method_use_covmat:
@@ -634,8 +642,8 @@ class InferenceFluctuationFitting(object):
         
         #========== Show results
         if show_fit_result:
-            self.get_mcmc_chains_outputs_results(par_list, sampler, extraname='_Fluctuation_'+kind)
-            self.run_mcmc_fluctuation_results(sampler, parinfo, extraname='_'+kind)
+            self.get_mcmc_chains_outputs_results(par_list, sampler, extname='_Fluctuation_'+kind)
+            self.run_mcmc_fluctuation_results(sampler, parinfo, extname='_'+kind)
 
         #========== Compute the best-fit model and set it
         if set_bestfit:
@@ -652,7 +660,7 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def run_mcmc_fluctuation_results(self, sampler, parinfo,
-                                     true_pk3d=None, extraname=''):
+                                     true_pk3d=None, extname=''):
         """
         This function is used to show the results of the MCMC
         regarding the fluctuation
@@ -685,16 +693,16 @@ class InferenceFluctuationFitting(object):
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
-
         k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
                                                                                 Nmc=self.mcmc_Nresamp)
-
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
+        best_pk2d_bkg   = self.nuisance_Abkg   * self._pk2d_bkg
 
         #========== Get the MC
         MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
         MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
         MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        MC_pk2d_bkg = np.zeros((self.mcmc_Nresamp, len(k2d)))
         
         MC_pars = utils_fitting.get_emcee_random_param(sampler, burnin=self.mcmc_burnin, Nmc=self.mcmc_Nresamp)
         for imc in range(self.mcmc_Nresamp):
@@ -704,14 +712,19 @@ class InferenceFluctuationFitting(object):
             # Get MC noise
             MC_pk2d_noise[imc,:] = self.nuisance_Anoise * self._pk2d_noise
 
+            # Get MC bkg
+            MC_pk2d_bkg[imc,:] = self.nuisance_Abkg * self._pk2d_bkg
+            
             # Get MC Pk2d
-            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - MC_pk2d_noise[imc,:]
+            corr = MC_pk2d_noise[imc,:] + MC_pk2d_bkg[imc,:]
+            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - corr
+
             
             # Get MC Pk3d
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image1.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_input_image1.pdf',
                                          self.data1.image,
                                          self._dy_image1,
                                          self._ymap_sphA1,
@@ -721,7 +734,7 @@ class InferenceFluctuationFitting(object):
                                          noise_mc1,
                                          mask=self.data1.mask,
                                          visu_smooth=10)
-        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_input_image2.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_input_image2.pdf',
                                          self.data2.image,
                                          self._dy_image2,
                                          self._ymap_sphA2,
@@ -733,21 +746,28 @@ class InferenceFluctuationFitting(object):
                                          visu_smooth=10)
         
         #========== Plot the covariance matrix
-        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_covariance.pdf',
+        if self.nuisance_bkg_mc1 is not None:
+            covmat_bkg = self._pk2d_bkg_cov
+        else:
+            covmat_bkg = None
+        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_covariance.pdf',
                                               self._pk2d_noise_cov,
                                               model_pk2d_covmat.to_value('kpc4'),
-                                              self._pk2d_modref_cov)
+                                              covmat_model=self._pk2d_modref_cov,
+                                              covmat_bkg=covmat_bkg)
         
         #========== Plot the Pk2d constraint
-        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk2d.pdf',
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'),
                                         np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
-                                        self._pk2d_noise_rms,
-                                        MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
+                                        self._pk2d_noise_rms, self._pk2d_bkg_rms,
+                                        MC_pk2d,
+                                        best_pk2d_noise, MC_pk2d_noise,
+                                        best_pk2d_bkg, MC_pk2d_bkg)
 
         #========== Plot the Pk3d constraint
-        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extraname+'_results_pk3d.pdf',
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)
@@ -820,9 +840,9 @@ class InferenceFluctuationFitting(object):
 
         #========== Define the sigma
         if self.method_use_covmat:
-            sigma = self._pk2d_noise_cov
+            sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov
         else:
-            sigma = self._pk2d_noise_rms
+            sigma = self._pk2d_noise_rms + self._pk2d_bkg_rms
 
         #========== Fitting function
         def fitfunc(x, *pars):
@@ -842,7 +862,7 @@ class InferenceFluctuationFitting(object):
 
         #========== Show results
         if show_fit_result:
-            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov, extraname='_Fluctuation')
+            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov, extname='_Fluctuation')
             self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo)
         
         #========== Compute the best-fit model and set it
@@ -894,13 +914,14 @@ class InferenceFluctuationFitting(object):
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
         k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
                                                                                 Nmc=self.mcmc_Nresamp)
-
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
+        best_pk2d_bkg   = self.nuisance_Abkg   * self._pk2d_bkg
 
         #========== Get the MC
         MC_pk3d = np.zeros((self.mcmc_Nresamp, len(k3d)))
         MC_pk2d = np.zeros((self.mcmc_Nresamp, len(k2d)))
         MC_pk2d_noise = np.zeros((self.mcmc_Nresamp, len(k2d)))
+        MC_pk2d_bkg = np.zeros((self.mcmc_Nresamp, len(k2d)))
 
         MC_pars = np.zeros((self.mcmc_Nresamp, len(popt)))
         isamp = 0
@@ -918,8 +939,12 @@ class InferenceFluctuationFitting(object):
             # Get MC noise
             MC_pk2d_noise[imc,:] = self.nuisance_Anoise * self._pk2d_noise
 
+            # Get MC bkg
+            MC_pk2d_bkg[imc,:] = self.nuisance_Abkg * self._pk2d_bkg
+            
             # Get MC Pk2d
-            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - MC_pk2d_noise[imc,:]
+            corr = MC_pk2d_noise[imc,:] + MC_pk2d_bkg[imc,:]
+            MC_pk2d[imc,:] = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2') - corr
             
             # Get MC Pk3d
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
@@ -947,18 +972,25 @@ class InferenceFluctuationFitting(object):
                                          visu_smooth=10)
         
         #========== Plot the covariance matrix
+        if self.nuisance_bkg_mc1 is not None:
+            covmat_bkg = self._pk2d_bkg_cov
+        else:
+            covmat_bkg = None
         utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit_Fluctuation_results_covariance.pdf',
                                               self._pk2d_noise_cov,
                                               model_pk2d_covmat.to_value('kpc4'),
-                                              self._pk2d_modref_cov)
+                                              covmat_model=self._pk2d_modref_cov,
+                                              covmat_bkg=covmat_bkg)
         
         #========== Plot the Pk2d constraint
         utils_plot.show_fit_result_pk2d(self.output_dir+'/CurveFit_Fluctuation_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'),
                                         np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
-                                        self._pk2d_noise_rms,
-                                        MC_pk2d, best_pk2d_noise, MC_pk2d_noise)
+                                        self._pk2d_noise_rms, self._pk2d_bkg_rms,
+                                        MC_pk2d,
+                                        best_pk2d_noise, MC_pk2d_noise,
+                                        best_pk2d_bkg, MC_pk2d_bkg)
         
         #========== Plot the Pk3d constraint
         utils_plot.show_fit_result_pk3d(self.output_dir+'/CurveFit_Fluctuation_results_pk3d.pdf',

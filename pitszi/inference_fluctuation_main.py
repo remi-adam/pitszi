@@ -42,7 +42,10 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - model (object from class Model()): the model object
 
         # Nuisance parameters
-        self.nuisance_Anoise (float): nuisance parameter -- the amplitude of the noise
+        - nuisance_Anoise (float): nuisance parameter -- the amplitude of the noise
+        - nuisance_Abkg (float): nuisance parameter -- extra background amplitude
+        - nuisance_bkg_mc1 (2d array): extra background MC realizations for data1
+        - nuisance_bkg_mc2 (2d array): extra background MC realizations for data2
 
         # Binning in k
         - kbin_min (quantity): minimum value of the bins edges
@@ -123,6 +126,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
                  data2=None,
                  #
                  nuisance_Anoise=1,
+                 nuisance_Abkg=0,
+                 nuisance_bkg_mc1=None,
+                 nuisance_bkg_mc2=None,
                  #
                  kbin_min=0*u.arcsec**-1,
                  kbin_max=0.1*u.arcsec**-1,
@@ -180,6 +186,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - data2 (object from Class Data()): the secondary data object (used for cross spectra)
 
         - nuisance_Anoise (float): noise Pk amplitude, a nuisance parameter.
+        - nuisance_Abkg (float): nuisance parameter -- extra background amplitude
+        - nuisance_bkg_mc1 (2d array): extra background MC realizations for data1
+        - nuisance_bkg_mc2 (2d array): extra background MC realizations for data2
 
         - kbin_min (quantity): minimum k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
         - kbin_max (quantity): maximal k value for the 2D power spectrum (homogeneous to 1/angle or 1/kpc)
@@ -223,7 +232,20 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             self.nuisance_Anoise = 0 # As a reference no noise correlation in the two data
         else:
             self.nuisance_Anoise = 1 # The noise amplitude is one for a single auto spectrum
-            
+
+        # Extra background (e.g. CIB) realization and nuisance parameter as normalization
+        if nuisance_bkg_mc1 is not None:
+            self.nuisance_Abkg = 1
+            self.nuisance_bkg_mc1 = nuisance_bkg_mc1
+            if data2 is None:
+                self.nuisance_bkg_mc2 = None # Cannot have a bkg for data2 if data2 is not used
+            else:
+                self.nuisance_bkg_mc2 = nuisance_bkg_mc2
+        else:
+            self.nuisance_Abkg = 0
+            self.nuisance_bkg_mc1 = None
+            self.nuisance_bkg_mc2 = None
+
         #----- Binning in k
         self.kbin_min   = kbin_min
         self.kbin_max   = kbin_max
@@ -252,40 +274,43 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self.output_dir = output_dir
 
         #========== Usefull hidden variable to be computed on the fly        
-        self._pk_setup_done      = False
+        self._pk_setup_done      = False # Tell if the setup was done
         
-        self._reso_arcsec        = None
-        self._reso_kpc           = None
-        self._kpc2arcsec         = None
+        self._reso_arcsec        = None  # map resolution in arcsec
+        self._reso_kpc           = None  # map resollution in kpc
+        self._kpc2arcsec         = None  # kpc to arcsec conversion
                 
-        self._dy_image1          = None
-        self._ymap_sphA1         = None
-        self._ymap_sphB1         = None
-        self._dy_image2          = None
-        self._ymap_sphA2         = None
-        self._ymap_sphB2         = None
+        self._dy_image1          = None  # fluctuation image data 1
+        self._ymap_sphA1         = None  # smooth model subtracted to data image 1
+        self._ymap_sphB1         = None  # smooth model in the denominator for data image 1
+        self._dy_image2          = None  # fluctuation image data 1
+        self._ymap_sphA2         = None  # smooth model subtracted to data image 2
+        self._ymap_sphB2         = None  # smooth model in the denominator for data image 2
         
-        self._k2d_norm_kpc       = None
-        self._k2d_norm_arcsec    = None
-        self._kedges_kpc         = None
-        self._kedges_arcsec      = None
-        self._kctr_kpc           = None
-        self._kctr_arcsec        = None
-        self._kcount             = None
+        self._k2d_norm_kpc       = None  # wavenumber norm in 1/kpc
+        self._k2d_norm_arcsec    = None  # wavenumber norm in 1/arcsec
+        self._kedges_kpc         = None  # wavenumber bin edges in 1/kpc
+        self._kedges_arcsec      = None  # wavenumber bin edges in 1/arcsec
+        self._kctr_kpc           = None  # wavenumber bin center in 1/kpc
+        self._kctr_arcsec        = None  # wavenumber bin center in 1/arcsec
+        self._kcount             = None  # number of counts in each k bin
         
-        self._pk2d_data          = None
-        self._pk2d_noise         = None
-        self._pk2d_noise_rms     = None
-        self._pk2d_noise_cov     = None
-        self._pk2d_noise_invcov  = None
-        self._pk2d_modref        = None
-        self._pk2d_modref_rms    = None
-        self._pk2d_totref_invcov = None
+        self._pk2d_data          = None  # data power spectrum
+        self._pk2d_noise         = None  # noise power spectrum mean
+        self._pk2d_noise_rms     = None  # noise power spectrum rms
+        self._pk2d_noise_cov     = None  # noise power spectrum covariance matrix
+        self._pk2d_noise_invcov  = None  # noise power spectrum inverse covariance matrix
+        self._pk2d_modref        = None  # reference model power spectrum mean
+        self._pk2d_modref_rms    = None  # reference model power spectrum rms
+        self._pk2d_bkg           = None  # extra background power spectrum mean 
+        self._pk2d_bkg_rms       = None  # extra background power spectrum rms
+        self._pk2d_bkg_cov       = None  # extra background power spectrum covariance matrix
+        self._pk2d_totref_invcov = None  # noise plus reference model power spectrum covariance matrix
 
-        self._conv_wf            = None
-        self._conv_pk2d3d        = None
+        self._conv_wf            = None  # window function to go from 2D to 3D power spectrum
+        self._conv_pk2d3d        = None  # conversion coefficient from 2d to 3d power spectrum
         
-        self._Kmnmn              = None
+        self._Kmnmn              = None  # Mask mode to mode conversion matrix
 
         
     #==================================================
@@ -495,16 +520,27 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self._pk2d_noise         = noise_mean.to_value('kpc2')
         self._pk2d_noise_rms     = np.diag(noise_cov.to_value('kpc4'))**0.5
         self._pk2d_noise_cov     = noise_cov.to_value('kpc4')
-        if self.method_use_covmat:
-            self._pk2d_noise_invcov = np.linalg.inv(noise_cov.to_value('kpc4'))
         
         self._pk2d_modref        = model_mean.to_value('kpc2')
         self._pk2d_modref_rms    = np.diag(model_cov.to_value('kpc4'))**0.5
         self._pk2d_modref_cov    = model_cov.to_value('kpc4')
 
+        if self.nuisance_bkg_mc1 is not None:
+            _, bkg_mean, bkg_cov = self.get_pk2d_bkg_statistics(physical=True)
+            self._pk2d_bkg        = bkg_mean.to_value('kpc2')
+            self._pk2d_bkg_rms    = np.diag(bkg_cov.to_value('kpc4'))**0.5
+            self._pk2d_bkg_cov    = bkg_cov.to_value('kpc4')
+        else:
+            self._pk2d_bkg        = 0 * self._pk2d_data
+            self._pk2d_bkg_rms    = 0 * self._pk2d_data
+            self._pk2d_bkg_cov    = 0 * self._pk2d_noise_cov
+            
         if self.method_use_covmat:
-            self._pk2d_totref_invcov = np.linalg.inv(noise_cov.to_value('kpc4') + model_cov.to_value('kpc4'))
-
+            self._pk2d_invcov        = np.linalg.inv(noise_cov.to_value('kpc4') + self._pk2d_bkg_cov)
+            self._pk2d_invcov_totref = np.linalg.inv(noise_cov.to_value('kpc4')
+                                                     + model_cov.to_value('kpc4')
+                                                     + self._pk2d_bkg_cov)
+        
         #---------- Convertion
         if not self.silent: print('    * Setup window function conversion')
 
@@ -1064,6 +1100,120 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
 
     #==================================================
+    # Compute extra background statistics
+    #==================================================
+    
+    def get_pk2d_bkg_statistics(self, physical=False):
+        """
+        This function compute the extra background properties
+        
+        Parameters
+        ----------
+        - physical (bool): set to true to have output in kpc units, else arcsec units
+
+        Outputs
+        ----------
+        - k2d (1d array): the values of k in each bin
+        - bkg_pk2d_ref (1d array): the bkg mean
+        - bkg_pk2d_covmat (2d array): the bkg covariance matrix
+
+        """
+
+        #----- Check
+        if self.nuisance_bkg_mc1 is None:
+            raise ValueError('No background MC provided. Cannot compute Bkg statistics.')
+        
+        #----- Sanity check
+        bin_counts = self.get_kbin_counts()
+        if np.amin(bin_counts) == 0:
+            raise ValueError('Some bins have zero counts. Please redefine the binning to avoid this issue.')
+        
+        #----- Useful info
+        kedges = self.get_kedges().to_value('arcsec-1')
+        reso   = self.model.get_map_reso().to_value('arcsec')
+
+        #----- Model accounting/or not for beam and TF
+        _, _, model_ymap_sphB1, _, _, model_ymap_sphB2 = self.get_pk2d_data_image()
+
+        #----- Extract bkg MC realization
+        bkg_ymap_mc1 = self.nuisance_bkg_mc1
+        if self.nuisance_bkg_mc2 is not None:
+            bkg_ymap_mc2 = self.nuisance_bkg_mc2
+        else:
+            bkg_ymap_mc2 = self.nuisance_bkg_mc1
+
+        Nmc01 = bkg_ymap_mc1.shape[0]
+        Nmc02 = bkg_ymap_mc2.shape[0]
+        if bkg_ymap_mc1 is None or bkg_ymap_mc2 is None:
+            raise ValueError("Bkg MC not available.")
+        if (Nmc01 < 100 or Nmc02 < 100) and not self.silent:
+            print('WARNING: the number of MC realizations to use is less than 100. This might not be enough.')
+
+        # Redefine the number of MC
+        Nmc = np.amin(np.array([Nmc01, Nmc02]))
+
+        #----- Compute Pk2d MC realization
+        bkg_pk2d_mc = np.zeros((Nmc, len(kedges)-1))
+        for imc in range(Nmc):
+            
+            # Account for deconvolution choices
+            if self.method_data_deconv:
+                img_y1 = utils_pk.deconv_transfer_function(bkg_ymap_mc1[imc,:,:],
+                                                           self.model.get_map_reso().to_value('arcsec'), 
+                                                           self.data1.psf_fwhm.to_value('arcsec'),
+                                                           self.data1.transfer_function, 
+                                                           dec_TF_LS=True, dec_beam=True)
+                img_y2 = utils_pk.deconv_transfer_function(bkg_ymap_mc2[imc,:,:],
+                                                           self.model.get_map_reso().to_value('arcsec'), 
+                                                           self.data2.psf_fwhm.to_value('arcsec'),
+                                                           self.data2.transfer_function, 
+                                                           dec_TF_LS=True, dec_beam=True)
+            else:
+                img_y1 = bkg_ymap_mc1[imc,:,:]
+                img_y2 = bkg_ymap_mc2[imc,:,:]
+                
+            # Noise to Pk
+            image_bkg_mc1 = (img_y1 - np.mean(img_y1))/model_ymap_sphB1 * self.method_w8
+            image_bkg_mc2 = (img_y2 - np.mean(img_y2))/model_ymap_sphB2 * self.method_w8
+            image_bkg_mc1[model_ymap_sphB1 <= 0] = 0
+            image_bkg_mc2[model_ymap_sphB2 <= 0] = 0
+            
+            k2d, pk_mc =  utils_pk.extract_pk2d(image_bkg_mc1, reso, image2=image_bkg_mc2, kedges=kedges)
+            bkg_pk2d_mc[imc,:] = pk_mc
+            
+        # Noise statistics
+        bkg_pk2d_mean = np.mean(bkg_pk2d_mc, axis=0)
+        bkg_pk2d_rms  = np.std(bkg_pk2d_mc, axis=0)
+
+        #----- Compute covariance
+        bkg_pk2d_covmat = np.zeros((len(kedges)-1, len(kedges)-1))
+        for imc in range(Nmc):
+            bkg_pk2d_covmat += np.matmul((bkg_pk2d_mc[imc,:]-bkg_pk2d_mean)[:,None],
+                                         (bkg_pk2d_mc[imc,:]-bkg_pk2d_mean)[None,:])
+        bkg_pk2d_covmat /= Nmc
+
+        #----- Sanity check again
+        if np.sum(np.isnan(bkg_pk2d_covmat)) > 0:
+            if not self.silent:
+                print('Some pixels in the covariance matrix are NaN.')
+            raise ValueError('Issue with noise covariance matrix')
+
+        #----- Units
+        if physical:
+            kpc2arcsec        = ((1*u.kpc/self.model.D_ang).to_value('')*u.rad).to_value('arcsec')
+            k2d               = k2d * kpc2arcsec**1 * u.kpc**-1
+            bkg_pk2d_mean   = bkg_pk2d_mean * kpc2arcsec**-2 * u.kpc**2
+            bkg_pk2d_covmat = bkg_pk2d_covmat * kpc2arcsec**-4 * u.kpc**4
+        else:
+            k2d               = k2d * u.arcsec**-1
+            bkg_pk2d_mean   = bkg_pk2d_mean * u.arcsec**2
+            bkg_pk2d_covmat = bkg_pk2d_covmat * u.arcsec**4
+
+        #---------- return
+        return k2d, bkg_pk2d_mean, bkg_pk2d_covmat
+
+    
+    #==================================================
     # Model for pk2d fit brute force
     #==================================================
     
@@ -1083,7 +1233,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - pk2d (1d np array): the pk model
 
         """
-
+        
         #----- Check the setup, reequiered here
         if self._pk_setup_done == False:
             raise ValueError('This function requieres do run the setup first')
@@ -1093,13 +1243,16 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
         #----- Compute the final model
         pk_noise = self._pk2d_noise # baseline is kpc2
+        pk_bkg   = self._pk2d_bkg     # baseline is kpc2
         if physical:
             pk_noise = pk_noise * u.kpc**2
+            pk_bkg   = pk_bkg   * u.kpc**2
         else:
             pk_noise = pk_noise * self._kpc2arcsec**2 * u.arcsec**2
-        
-        pk2d_tot = pk2d_modvar + self.nuisance_Anoise * pk_noise
-        
+            pk_bkg = pk_bkg     * self._kpc2arcsec**2 * u.arcsec**2
+
+        pk2d_tot = pk2d_modvar + self.nuisance_Anoise * pk_noise + self.nuisance_Abkg * pk_bkg
+
         return k2d, pk2d_tot
     
     
@@ -1174,12 +1327,15 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
         #----- Compute the final model
         pk_noise = self._pk2d_noise # baseline is kpc2
+        pk_bkg   = self._pk2d_bkg     # baseline is kpc2
         if physical:
             pk_noise = pk_noise * u.kpc**2
+            pk_bkg   = pk_bkg   * u.kpc**2
         else:
             pk_noise = pk_noise * self._kpc2arcsec**2 * u.arcsec**2
-
-        pk2d_tot = pk2d_mod + self.nuisance_Anoise * pk_noise
+            pk_bkg   = pk_bkg   * self._kpc2arcsec**2 * u.arcsec**2
+                    
+        pk2d_tot = pk2d_mod + self.nuisance_Anoise * pk_noise + self.nuisance_Abkg * pk_bkg
         
         return k2d, pk2d_tot
     

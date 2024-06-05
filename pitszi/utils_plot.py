@@ -816,8 +816,10 @@ def show_fit_result_pk2d(figfile,
                          pk2d_modref,
                          pk2d_data_err_model,
                          pk2d_data_err_noise,
+                         pk2d_data_err_bkg,
                          pk2d_mc,
                          pk2d_noise_best, pk2d_noise_mc,                         
+                         pk2d_bkg_best, pk2d_bkg_mc,                         
                          true_pk2d=None):
     '''
     This function plots the deprojected constraint on Pk3d
@@ -831,9 +833,12 @@ def show_fit_result_pk2d(figfile,
     - pk2d_modref (1d array): reference model used for uncertainty computation
     - pk2d_data_err_model (1d array): uncertainty acssociated with the model
     - pk2d_data_err_noise (1d array): uncertainty associated with the noise
+    - pk2d_data_err_bkg (1d array): uncertainty associated with the bkg
     - pk2d_mc (2d array): MC ressampling for the cluster model contribution
     - pk2d_noise_best (1d array): bestfit noise contribution
     - pk2d_noise_mc (2d array): MC ressampling for the noise contribution
+    - pk2d_bkg_best (1d array): bestfit bkg contribution
+    - pk2d_bkg_mc (2d array): MC ressampling for the bkg contribution
     - true_pk2d (dict): pass a dictionary containing the Pk3d to compare with
     in the form {'k':array in arcsec-1, 'pk':array in arcsec2}
     
@@ -849,25 +854,37 @@ def show_fit_result_pk2d(figfile,
                               (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
     pk2d_noise_perc1 = np.percentile(pk2d_noise_mc,
                                     (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
+    pk2d_bkg_perc1 = np.percentile(pk2d_bkg_mc,
+                                   (100-(100-ci1)/2.0, 50, (100-ci1)/2.0), axis=0)
 
     ci2 = 95.0
     pk2d_perc2 = np.percentile(pk2d_mc,
                               (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
     pk2d_noise_perc2 = np.percentile(pk2d_noise_mc,
                                     (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
+    pk2d_bkg_perc2 = np.percentile(pk2d_bkg_mc,
+                                    (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
 
     #----- Compute uncertainty
-    err_tot = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_model**2+pk2d_data_err_noise**2)**0.5
     err_noise = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*pk2d_data_err_noise
+    err_nbkg  = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_noise**2
+                                                                + pk2d_data_err_bkg**2)**0.5
+    err_tot   = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_model**2
+                                                                + pk2d_data_err_noise**2
+                                                                + pk2d_data_err_bkg**2)**0.5
     
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(7, 5))
+    frame1 = fig.add_axes((.15,.3,.8,.6))
+
     # Data
-    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_tot, marker='o', ls='', color='grey',
-                 label='Data (noise + model uncertainties)')
-    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_noise, marker='o', ls='', color='k',
-                 label='Data (noise uncertainty only)')
+    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_tot, marker='.', ls='', color='lightgrey',
+                 label='Data (noise+bkg+model uncertainties)')
+    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_nbkg, marker='.', ls='', color='grey',
+                 label='Data (noise+bkg uncertainty)')
+    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_noise, marker='.', ls='', color='k',
+                 label='Data (noise uncertainty)')
 
     # Model reference
     plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Best-fit model and intrinsic scatter')
@@ -893,23 +910,48 @@ def show_fit_result_pk2d(figfile,
                      np.sqrt(2*np.pi*k2d**2*pk2d_noise_perc2[2,:]),
                      color='darkcyan', alpha=0.15)
 
+    # Bkg fit
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_bkg_perc1[1,:]), color='darkorange', ls='--',
+               label='Bkg median, 68% and 95% C.I.')
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_bkg_perc1[0,:]),
+                     np.sqrt(2*np.pi*k2d**2*pk2d_bkg_perc1[2,:]),
+                     color='darkorange', alpha=0.3)
+    plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_bkg_perc2[0,:]),
+                     np.sqrt(2*np.pi*k2d**2*pk2d_bkg_perc2[2,:]),
+                     color='darkorange', alpha=0.15)
+
     # Total
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_modref)),
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_bkg_best + pk2d_modref)),
                color='red', ls='-', label='Total best-fit')
         
     if true_pk2d is not None:
         plt.plot(true_pk2d['k'], np.sqrt(2*np.pi*true_pk2d['k']**2*true_pk2d['pk']),
                  label='True $P_k$', color='orange')
-    plt.xlabel(r'$k$ (kpc$^{-1}$)')
     plt.ylabel(r'$\sqrt{2 \pi k^2 P(k)}$')
     plt.xscale('log')
     plt.yscale('log')
     plt.xlim(np.amin(k2d)*0.9, np.amax(k2d)*1.1)
     
     plt.ylim(np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*1e-3,
-             np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*5)
+             np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*2)
     
-    plt.legend(fontsize=12)
+    plt.legend(fontsize=10)
+
+    frame2 = fig.add_axes((.15,.1,.8,.2))
+    dat = np.sqrt(2*np.pi*k2d**2*pk2d_data)
+    mod = np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_bkg_best + pk2d_modref))
+    plt.plot(k2d, (dat-mod)/err_tot, marker='o', color='lightgrey')
+    plt.plot(k2d, (dat-mod)/err_nbkg, marker='o', color='grey')
+    plt.plot(k2d, (dat-mod)/err_noise, marker='o', color='k')
+    plt.axhline(0, color='k', linestyle='-')
+    plt.axhline(+3, color='k', linestyle='--')
+    plt.axhline(-3, color='k', linestyle='--')
+    plt.axhline(+5, color='k', linestyle='--')
+    plt.axhline(-5, color='k', linestyle='--')
+    plt.xscale('log')
+    plt.xlabel(r'$k$ (kpc$^{-1}$)')
+    plt.ylabel('Residual ($\sigma$)')
+    
     plt.savefig(figfile)
     plt.close()
 
@@ -1022,7 +1064,8 @@ def show_input_delta_ymap(figfile,
 def show_fit_result_covariance(figfile,
                                covmat_data,
                                covmat_bfmodel,
-                               covmat_model=None):
+                               covmat_model=None,
+                               covmat_bkg=None):
     '''
     This function plots the best fit map model
     
@@ -1032,16 +1075,16 @@ def show_fit_result_covariance(figfile,
     - covmat_data (2d array): bin to bin noise covariance matrix
     - covmat_bfmodel (2d array): bin to bin best fit model covariance matrix
     - covmat_model (2d array): bin to bin reference model covariance matrix
+    - covmat_nkg (2d array): bin to bin background covariance matrix
 
     Output:
     -------
     - Plots produced
     '''
-
-    if covmat_model is None:
-        Nrow = 2
-    else:
-        Nrow = 3
+    
+    Nrow = 2
+    if covmat_model is not None: Nrow += 1
+    if covmat_bkg   is not None: Nrow += 1
     
     plt.rcParams.update({'font.size': 12})
     fig = plt.figure(0, figsize=(12, 5*Nrow))
@@ -1078,8 +1121,9 @@ def show_fit_result_covariance(figfile,
     plt.xlabel('k bin')
     plt.ylabel('k bin')
 
+    idx = 0
     if covmat_model is not None:
-    
+        idx += 2
         # Covariance model
         ax = plt.subplot(Nrow, 2, 5)
         plt.imshow(covmat_model)
@@ -1093,6 +1137,24 @@ def show_fit_result_covariance(figfile,
         plt.imshow(utils.correlation_from_covariance(covmat_model))
         cb = plt.colorbar()
         plt.title(r'Ref model correlation matrix')
+        plt.xlabel('k bin')
+        plt.ylabel('k bin')
+
+    if covmat_bkg is not None:
+    
+        # Covariance model
+        ax = plt.subplot(Nrow, 2, 5+idx)
+        plt.imshow(covmat_bkg)
+        cb = plt.colorbar()
+        plt.title(r'Background covariance matrix')
+        plt.xlabel('k bin')
+        plt.ylabel('k bin')
+        
+        # Correlation model
+        ax = plt.subplot(Nrow, 2, 6+idx)
+        plt.imshow(utils.correlation_from_covariance(covmat_bkg))
+        cb = plt.colorbar()
+        plt.title(r'Background correlation matrix')
         plt.xlabel('k bin')
         plt.ylabel('k bin')
     
