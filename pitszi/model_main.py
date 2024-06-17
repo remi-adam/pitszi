@@ -84,7 +84,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     ToDo
     ----------  
     - Improve the 3D pressure profile cube to avoid numercial issues near the center
-    - deal with the fact that fluctuations can lead to negative pressure: add 'statistics' option
+    - Implement the possibility to have radial dependant fluctuations
 
     """
 

@@ -250,7 +250,7 @@ def Apeak_to_M3d_G13(A_kpeak, Linj=500*u.kpc, alpha=0.25, gamma=5/3.0):
 
 
 #==================================================
-# Mach number from \int Pk from Zhuravleva + 2023
+# Mach number from \int Pk from Mohapatra+
 #==================================================
 
 def sigma_to_M3d_M20(sigma, gamma=5.0/3):
@@ -487,7 +487,7 @@ def pnt_over_ptot_r_B11(r, R500, z, c500=3.0, cosmo=astropy.cosmology.Planck15):
     Implement the nonthermal to thermal pressure from 
     N. Battaglia + 2012 (The Astrophysical Journal, 758:74 (23pp), 2012 October 20)
     See their Eq 16
-
+    
     Parameters
     ----------
     - r (quantity): radius homogeneous to kpc
