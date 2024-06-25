@@ -573,7 +573,8 @@ class InferenceFluctuation(InferenceFluctuationFitting):
                       conv_radial_model_beam=True,
                       conv_radial_model_TF=False,
                       remove_GNFW_core=True,
-                      smooth_FWHM=0*u.arcsec):
+                      smooth_FWHM=0*u.arcsec,
+                      normalize=True):
         """
         This function is a helper to set the weight map with the mask and 
         the smooth model. It can account for smoothing and remove the cluster 
@@ -589,6 +590,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - remove_GNFW_core (bool): if True, and if the model is a GNFW, it will 
         set the core parameter from the model to zero
         - smooth_FWHM (quantity): smoothing of weight map, homogeneous to arcsec
+        - normalize (bool): set to True to have a normalized weight map, i.e. sum(w) = Npix
 
         Outputs
         ----------
@@ -646,6 +648,11 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             sigma2fwhm = 2 * np.sqrt(2*np.log(2))
             sigma = smooth_FWHM.to_value('deg')/sigma2fwhm/self.model.get_map_reso().to_value('deg')
             w8map = gaussian_filter(w8map, sigma=sigma)
+
+        # Normalize
+        if normalize:
+            norm = np.sum(w8map) / len(w8map.flatten())
+            w8map = w8map / norm
         
         self.method_w8 = w8map
         
