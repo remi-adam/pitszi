@@ -455,7 +455,9 @@ class InferenceFluctuationFitting(object):
     # lnL function for the fluctuation fit
     #==================================================
     
-    def lnlike_fluctuation(self, param, parinfo, kind='projection'):
+    def lnlike_fluctuation(self, param, parinfo,
+                           kind='projection',
+                           include_model_error=False):
         """
         This is the likelihood function used for the fit of the fluctuation.
             
@@ -465,6 +467,8 @@ class InferenceFluctuationFitting(object):
         - parinfo (dict): see parinfo in mcmc_fluctuation
         - kind (str): projection or brute, for using 
         get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+        - include_model_error (bool): set to true to include intrinsic model uncertainty
+        assuming the reference model
 
         Outputs
         ----------
@@ -492,12 +496,14 @@ class InferenceFluctuationFitting(object):
         residual_test = self._pk2d_data - pk2d_test
         
         if self.method_use_covmat:
-            if kind == 'brute':      inverse_cov = self._pk2d_invcov_totref
-            if kind == 'projection': inverse_cov = self._pk2d_invcov
+            if include_model_error:
+                inverse_cov = self._pk2d_invcov_totref
+            else:
+                inverse_cov = self._pk2d_invcov
         else:
-            if kind == 'brute':
+            if include_model_error:
                 variance = self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2 + self._pk2d_bkg_rms**2
-            if kind == 'projection':
+            else:
                 variance = self._pk2d_noise_rms**2 + self._pk2d_bkg_rms**2
         
         # compute lnL
@@ -521,6 +527,7 @@ class InferenceFluctuationFitting(object):
     
     def run_mcmc_fluctuation(self, parinfo,
                              kind='projection',
+                             include_model_error=False,
                              filename_sampler=None,
                              show_fit_result=False,
                              set_bestfit=False):
@@ -551,6 +558,8 @@ class InferenceFluctuationFitting(object):
 
         - kind (str): projection or brute, for using 
         get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+        - include_model_error (bool): set to true to include intrinsic model uncertainty
+        assuming the reference model
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): set to true to produce plots for fitting results
         - set_bestfit (bool): set the best fit to the model
@@ -571,6 +580,9 @@ class InferenceFluctuationFitting(object):
             print('      The setup was not done.')
             print('      Run pk_setup() with the correct analysis framework before proceeding.')
 
+        if kind == 'brute' and include_model_error == False:
+            print('      WARNING: brute method is dangerous without including model uncertainties .')
+            
         #========== Copy the input model
         input_model = copy.deepcopy(self.model)
         
@@ -627,7 +639,7 @@ class InferenceFluctuationFitting(object):
 
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         self.lnlike_fluctuation, 
-                                        args=[parinfo, kind], 
+                                        args=[parinfo, kind, include_model_error], 
                                         pool=mypool,
                                         moves=moves,
                                         backend=backend)
@@ -779,6 +791,7 @@ class InferenceFluctuationFitting(object):
     
     def run_curvefit_fluctuation(self, parinfo,
                                  kind='projection',
+                                 include_model_error=False,
                                  show_fit_result=False,
                                  set_bestfit=False):
         """
@@ -808,6 +821,8 @@ class InferenceFluctuationFitting(object):
 
         - kind (str): projection or brute, for using 
         get_pk2d_model_proj or get_pk2d_model_brute to compute the model
+        - include_model_error (bool): set to true to include intrinsic model uncertainty
+        assuming the reference model
         - show_fit_result (bool): set to true to produce plots for fitting results
         - set_bestfit (bool): set the best fit to the model
 
@@ -840,9 +855,15 @@ class InferenceFluctuationFitting(object):
 
         #========== Define the sigma
         if self.method_use_covmat:
-            sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov
+            if include_model_error:
+                sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov + self._pk2d_modref_cov
+            else:
+                sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov
         else:
-            sigma = self._pk2d_noise_rms + self._pk2d_bkg_rms
+            if include_model_error:
+                sigma = (self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2 + self._pk2d_bkg_rms**2)**0.5
+            else:
+                sigma = (self._pk2d_noise_rms**2 + self._pk2d_bkg_rms**2)**0.5
 
         #========== Fitting function
         def fitfunc(x, *pars):

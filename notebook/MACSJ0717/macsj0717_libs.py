@@ -1,12 +1,15 @@
 # This file probides useful functions for the analysis of MACS J0717.5+3745 pressure fluctuations
 
 import os
+import sys
+sys.path.insert(0,'/Users/adam/Project/NIKA/Software/Processing/Labtools/RA/pitszi/')
 import numpy as np
 from astropy.io import fits
 import astropy.units as u
 from reproject import reproject_interp
 from scipy.interpolate import interp1d
 from minot.ClusterTools import map_tools
+import pitszi
 
 
 #============================================================
@@ -56,7 +59,7 @@ def compton2jy(header):
 # Compute CIB simulations
 #============================================================
 
-def simu_cib(RA0, Dec0, header, beam_FWHM,
+def simu_cib(RA0, Dec0, header, beam_FWHM, TF,
              Nsim=1000, Scut_high=100, Scut_low=0.0):
 
     sigma2fwhm = 2 * np.sqrt(2*np.log(2))
@@ -79,10 +82,49 @@ def simu_cib(RA0, Dec0, header, beam_FWHM,
         w2 = cat_imc['SNIKA2000']*1e3 < Scut_high
         cat_imc = cat_imc[w1*w2]
         
+        src_imc = np.zeros((header['NAXIS1'], header['NAXIS2']))
         for isrc in range(len(cat_imc)):
             dist_map = map_tools.greatcircle(ramap, decmap, RA0+cat_imc['ra'][isrc], Dec0+cat_imc['dec'][isrc])
             flux = cat_imc['SNIKA2000'][isrc]*1e3
-            if flux < Scut_high:
-                src[imc,:,:] += flux*np.exp(-dist_map**2/2/(beam_FWHM.to_value('deg')/sigma2fwhm)**2)
+            src_imc += flux*np.exp(-dist_map**2/2/(beam_FWHM.to_value('deg')/sigma2fwhm)**2)
                 
+        img_conv = pitszi.utils_pk.apply_transfer_function(src_imc, header['CDELT2']*3600, 
+                                                           beam_FWHM.to_value('arcsec'), TF)
+        src[imc,:,:] = img_conv    
+                
+    return src
+
+
+#============================================================
+# Compute low-M halos simulations
+#============================================================
+
+def simu_lowmc(RA0, Dec0, header, beam_FWHM, TF, Nsim=100):
+
+    sigma2fwhm = 2 * np.sqrt(2*np.log(2))
+
+    ramap, decmap = map_tools.get_radec_map(header)
+
+    src = np.zeros((Nsim, header['NAXIS1'], header['NAXIS2']))
+    
+    path     = '/Users/adam/Project/NIKA/Software/Processing/Labtools/RA/pitszi/COSMOS_sim/'
+    ignored  = {".DS_Store"}
+    catfiles = [x for x in os.listdir(path) if x not in ignored]
+    np.random.shuffle(catfiles)
+    
+    for imc in range(Nsim):
+        if Nsim>1 and imc % 5 == 0: print(imc, '/', Nsim)
+        hdul = fits.open(path+catfiles[imc])
+        lmh_data = hdul[5].data /(-11.9e3)
+        lmh_head = hdul[5].header
+        hdul.close()
+        lmh_head['CRVAL1'] = RA0
+        lmh_head['CRVAL2'] = Dec0
+        lmh_rep, _ = reproject_interp((lmh_data, lmh_head), header)
+        
+        lmh_rep_conv = pitszi.utils_pk.apply_transfer_function(lmh_rep, header['CDELT2']*3600, 
+                                                               beam_FWHM.to_value('arcsec'), TF)
+        
+        src[imc,:,:] = lmh_rep_conv
+        
     return src
