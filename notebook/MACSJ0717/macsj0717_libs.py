@@ -6,11 +6,15 @@ sys.path.insert(0,'/Users/adam/Project/NIKA/Software/Processing/Labtools/RA/pits
 import numpy as np
 from astropy.io import fits
 import astropy.units as u
+from astropy.wcs import WCS
 from reproject import reproject_interp
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter
+import matplotlib.pyplot as plt
 from minot.ClusterTools import map_tools
 import pitszi
 
+sigma2fwhm = 2 * np.sqrt(2*np.log(2))
 
 #============================================================
 # Extract the transfer function
@@ -56,13 +60,118 @@ def compton2jy(header):
 
 
 #============================================================
+# Extract the data
+#============================================================
+
+def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
+
+    # Data image
+    hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/MAP150GHz_MACSJ0717.fits')
+    cl_head = map_tools.define_std_header(hdul[0].header['CRVAL1'], hdul[0].header['CRVAL2'],
+                                      FoV.to_value('deg'), FoV.to_value('deg'), reso.to_value('deg'))
+    img_ini  = hdul[0].data
+    img_ini, _ = reproject_interp((img_ini, hdul[0].header), cl_head)
+    img_ini[np.isnan(img_ini)] = 0
+
+    # Point sources
+    hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/PointSourceModel150GHz_MACSJ0717.fits')
+    img_ps = hdul[0].data
+    img_ps, _ = reproject_interp((img_ps, hdul[0].header), cl_head)
+    img_ps[np.isnan(img_ps)] = 0
+    cl_img = img_ini - img_ps
+
+    # Jackknife
+    hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2015_10_MACSJ0717_Paper/IDL/Save/NIKA_JK_map_2mm.fits')
+    img_jk = hdul[0].data*1e3
+    img_jk, _ = reproject_interp((img_jk, hdul[0].header), cl_head)
+    img_jk[np.isnan(img_jk)] = 0
+    cl_jk = img_jk
+
+    # Half maps
+    cl_img1 = cl_img - cl_jk
+    cl_img2 = cl_img + cl_jk
+
+    # Noise
+    hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/NoiseMC150GHz_MACSJ0717.fits')
+    noise = hdul[1].data    
+    noise =  np.swapaxes(np.swapaxes(noise, 2,0), 1,2)
+    noise_rep = np.zeros((len(noise[:,0,0]), img_ini.shape[0], img_ini.shape[1]))
+    for imc in range(len(noise[:,0,0])):
+        repro, _ = reproject_interp((noise[imc,:,:], hdul[0].header), cl_head)
+        repro[np.isnan(repro)] = 0
+        noise_rep[imc,:,:] = repro
+    cl_noise = noise_rep
+    cl_rms = np.std(noise_rep, axis=0)
+    cl_rms[cl_rms == 0] = np.amax(cl_rms)*1e3
+    cl_rms = gaussian_filter(cl_rms,sigma=10/sigma2fwhm/cl_head['CDELT2']/3600)
+
+    # Point source mask and noise cut
+    cl_mask = img_ps*0 + 1
+    cl_mask[img_ps > ps_mask_lim] = 0
+    cl_mask[cl_rms > np.amin(cl_rms)*2] = 0
+
+    # Jy/beam to Compton conversion
+    y2jy = compton2jy(cl_head)*1e3
+    cl_img   = cl_img/y2jy
+    cl_img1  = cl_img1/y2jy
+    cl_img2  = cl_img2/y2jy
+    cl_jk    = cl_jk/y2jy
+    cl_ps   = img_ps/y2jy
+    cl_rms   = cl_rms/np.abs(y2jy)
+    cl_noise = cl_noise/y2jy
+
+    # Show the inputs
+    if show == True:
+        fig = plt.figure(0, figsize=(15, 7))
+        ax = plt.subplot(2, 4, 1, projection=WCS(cl_head))
+        plt.imshow(cl_img*1e5, origin='lower')
+        plt.colorbar()
+        plt.title(r'$10^5$ y-map')
+        
+        ax = plt.subplot(2, 4, 2, projection=WCS(cl_head))
+        plt.imshow(cl_rms*1e5, origin='lower')
+        plt.colorbar()
+        plt.title(r'$10^5$ y-map rms')
+        
+        ax = plt.subplot(2, 4, 3, projection=WCS(cl_head))
+        plt.imshow(cl_img/cl_rms, origin='lower')
+        plt.colorbar()
+        plt.title(r'S/N')
+        
+        ax = plt.subplot(2, 4, 4, projection=WCS(cl_head))
+        plt.imshow(cl_ps*y2jy, origin='lower')
+        plt.colorbar()
+        plt.title('PS model (mJy/beam)')
+        
+        ax = plt.subplot(2, 4, 5, projection=WCS(cl_head))
+        plt.imshow(cl_mask, origin='lower')
+        plt.colorbar()
+        plt.title('Mask')
+        
+        ax = plt.subplot(2, 4, 6, projection=WCS(cl_head))
+        plt.imshow(cl_jk*1e5, origin='lower')
+        plt.colorbar()
+        plt.title('$10^5$ JK')
+        
+        ax = plt.subplot(2, 4, 7, projection=WCS(cl_head))
+        plt.imshow(cl_img1/cl_rms/2**0.5, origin='lower')
+        plt.colorbar()
+        plt.title('S/N y-map1')
+        
+        ax = plt.subplot(2, 4, 8, projection=WCS(cl_head))
+        plt.imshow(cl_img2/cl_rms/2**0.5, origin='lower')
+        plt.colorbar()
+        plt.title('S/N y-map2')
+        
+    return cl_head, y2jy, cl_img, cl_img1, cl_img2, cl_jk, cl_ps, cl_rms, cl_noise, cl_mask
+
+
+#============================================================
 # Compute CIB simulations
 #============================================================
 
 def simu_cib(RA0, Dec0, header, beam_FWHM, TF,
              Nsim=1000, Scut_high=100, Scut_low=0.0):
-
-    sigma2fwhm = 2 * np.sqrt(2*np.log(2))
 
     ramap, decmap = map_tools.get_radec_map(header)
 
@@ -128,3 +237,51 @@ def simu_lowmc(RA0, Dec0, header, beam_FWHM, TF, Nsim=100):
         src[imc,:,:] = lmh_rep_conv
         
     return src
+
+
+#============================================================
+# Defines the data
+#============================================================
+
+def def_data(cl_img, cl_head, cl_noise, cl_mask, beam_FWHM, TF, outdir, Nsim):
+    
+    cl_data = pitszi.Data(cl_img, cl_head, 
+                          psf_fwhm = beam_FWHM,
+                          transfer_function=TF,
+                          silent=True, output_dir=outdir)
+
+    #----- Define the noise properties
+    cl_data.noise_mc = cl_noise
+    cl_data.set_noise_model_from_mc()
+    cl_data.noise_mc = cl_data.get_noise_monte_carlo_from_model(Nmc=Nsim)
+    cl_data.noise_rms = cl_data.get_noise_rms_from_model(Nmc=Nsim)
+    cl_data.noise_rms[cl_data.noise_rms == 0] = np.amax(cl_data.noise_rms)*1e3
+    cl_data.noise_rms = gaussian_filter(cl_data.noise_rms,sigma=10/sigma2fwhm/cl_head['CDELT2']/3600)
+    
+    #----- Define the mask
+    cl_data.mask = cl_mask
+
+    return cl_data
+
+
+#============================================================
+# Defines the ROI
+#============================================================
+
+def def_roi(cl_head, model, mask_theta=2*u.arcmin, show=False):
+    
+    ramap, decmap = map_tools.get_radec_map(cl_head)
+    dist_map = map_tools.greatcircle(ramap, decmap, 
+                                     model.coord.ra.to_value('deg'), 
+                                     model.coord.dec.to_value('deg'))
+    roi = dist_map * 0 + 1
+    roi[dist_map > mask_theta.to_value('deg')] = 0 
+
+    if show==True:
+        fig = plt.figure(0, figsize=(12, 5))
+        ax = plt.subplot(1, 1, 1, projection=WCS(cl_head))
+        plt.imshow(roi, origin='lower')
+        plt.colorbar()
+        plt.title('ROI')
+        
+    return roi

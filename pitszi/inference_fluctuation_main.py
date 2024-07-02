@@ -312,7 +312,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         
         self._Kmnmn              = None  # Mask mode to mode conversion matrix
 
-        
+
     #==================================================
     # Print parameters
     #==================================================
