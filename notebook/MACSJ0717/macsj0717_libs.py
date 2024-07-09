@@ -63,7 +63,24 @@ def compton2jy(header):
 # Extract the data
 #============================================================
 
-def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
+def extract_data(FoV, reso, ps_mask_lim=0.1, show=False, clean_ksz=False):
+
+    # define header
+    hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/MAP150GHz_MACSJ0717.fits')
+    cl_head = map_tools.define_std_header(hdul[0].header['CRVAL1'], hdul[0].header['CRVAL2'],
+                                      FoV.to_value('deg'), FoV.to_value('deg'), reso.to_value('deg'))
+    hdul.close()
+    
+    # kSZ image
+    if clean_ksz:
+        hdul1 = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/MAP150GHz_MACSJ0717.fits')
+        hdul2 = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/MAP150GHz_MACSJ0717kSZ.fits')
+        img1  = hdul1[0].data
+        img2  = hdul2[0].data
+        kszcorr, _ = reproject_interp((img1-img2, hdul1[0].header), cl_head)
+        kszcorr[np.isnan(kszcorr)] = 0
+        hdul1.close()
+        hdul2.close()
 
     # Data image
     hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/MAP150GHz_MACSJ0717.fits')
@@ -72,6 +89,8 @@ def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
     img_ini  = hdul[0].data
     img_ini, _ = reproject_interp((img_ini, hdul[0].header), cl_head)
     img_ini[np.isnan(img_ini)] = 0
+    if clean_ksz: img_ini -= kszcorr
+    hdul.close()
 
     # Point sources
     hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/PointSourceModel150GHz_MACSJ0717.fits')
@@ -79,6 +98,7 @@ def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
     img_ps, _ = reproject_interp((img_ps, hdul[0].header), cl_head)
     img_ps[np.isnan(img_ps)] = 0
     cl_img = img_ini - img_ps
+    hdul.close()
 
     # Jackknife
     hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2015_10_MACSJ0717_Paper/IDL/Save/NIKA_JK_map_2mm.fits')
@@ -86,10 +106,13 @@ def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
     img_jk, _ = reproject_interp((img_jk, hdul[0].header), cl_head)
     img_jk[np.isnan(img_jk)] = 0
     cl_jk = img_jk
+    hdul.close()
 
     # Half maps
     cl_img1 = cl_img - cl_jk
     cl_img2 = cl_img + cl_jk
+    if clean_ksz: cl_img1 -= kszcorr
+    if clean_ksz: cl_img2 -= kszcorr
 
     # Noise
     hdul = fits.open('/Users/adam/Project/Notes-Papier-Conf/2016_12_Edge_Search/Save/Products/NoiseMC150GHz_MACSJ0717.fits')
@@ -104,6 +127,7 @@ def extract_data(FoV, reso, ps_mask_lim=0.1, show=False):
     cl_rms = np.std(noise_rep, axis=0)
     cl_rms[cl_rms == 0] = np.amax(cl_rms)*1e3
     cl_rms = gaussian_filter(cl_rms,sigma=10/sigma2fwhm/cl_head['CDELT2']/3600)
+    hdul.close()
 
     # Point source mask and noise cut
     cl_mask = img_ps*0 + 1
