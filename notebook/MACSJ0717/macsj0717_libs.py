@@ -7,6 +7,7 @@ import numpy as np
 from astropy.io import fits
 import astropy.units as u
 from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
 from reproject import reproject_interp
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
@@ -188,6 +189,72 @@ def extract_data(FoV, reso, ps_mask_lim=0.1, show=False, clean_ksz=False):
         plt.title('S/N y-map2')
         
     return cl_head, y2jy, cl_img, cl_img1, cl_img2, cl_jk, cl_ps, cl_rms, cl_noise, cl_mask
+
+
+#============================================================
+# Defines the radial model
+#============================================================
+
+def def_fitparprof(RM):
+    
+    cl_coord = SkyCoord(109.3806*u.deg, 37.7583*u.deg, frame='icrs')
+    RA  = cl_coord.ra
+    Dec = cl_coord.dec
+
+    if RM == 1:
+        fitpar_prof = {
+            'M500':{'guess':[10,1], 'unit':1e14*u.Msun, 'limit':[1, 100], 'P_ref':'A10MD'},
+            'ZL':{'guess':[0,1e-5],'unit':None},
+        }
+    if RM == 2: 
+        fitpar_prof = {
+            'M500':{'guess':[10,1], 'unit':1e14*u.Msun, 'limit':[1, 100], 'P_ref':'A10MD'},
+            'RA': {'guess':[RA.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                   'limit':[RA.to_value('deg')-0.5/60, RA.to_value('deg')+0.5/60]},
+            'Dec': {'guess':[Dec.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                    'limit':[Dec.to_value('deg')-0.5/60, Dec.to_value('deg')+0.5/60]},
+            'ZL':{'guess':[0,1e-5],'unit':None},
+        }    
+    if RM == 3: 
+        fitpar_prof = {
+            'M500':{'guess':[10,1], 'unit':1e14*u.Msun, 'limit':[1, 100], 'P_ref':'A10MD'},
+            'RA': {'guess':[RA.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                   'limit':[RA.to_value('deg')-0.5/60, RA.to_value('deg')+0.5/60]},
+            'Dec': {'guess':[Dec.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                    'limit':[Dec.to_value('deg')-0.5/60, Dec.to_value('deg')+0.5/60]},
+            'min_to_maj_axis_ratio':{'guess':[0.5,0.1], 'unit':None, 'limit':[0,1]}, 
+            'angle':{'guess':[20,10], 'unit':u.deg, 'limit':[-90,90]},
+            'ZL':{'guess':[0,1e-5],'unit':None},
+        }
+    if RM == 4: 
+        fitpar_prof = {
+            'P_0': {'guess':[0.02, 0.001], 'unit': u.keV*u.cm**-3, 'limit':[0, np.inf]},
+            'r_p': {'guess':[1000, 1000], 'unit': u.kpc, 'limit':[0, np.inf]},
+            'RA': {'guess':[RA.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                   'limit':[RA.to_value('deg')-0.5/60, RA.to_value('deg')+0.5/60]},
+            'Dec': {'guess':[Dec.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                    'limit':[Dec.to_value('deg')-0.5/60, Dec.to_value('deg')+0.5/60]},
+            'min_to_maj_axis_ratio':{'guess':[0.5,0.1], 'unit':None, 'limit':[0,1]}, 
+            'angle':{'guess':[20,10], 'unit':u.deg, 'limit':[-90,90]},
+            'ZL':{'guess':[0,1e-5],'unit':None},
+        }
+    if RM == 5: 
+        fitpar_prof = {
+            'P_0': {'guess':[0.02, 0.001], 'unit': u.keV*u.cm**-3, 'limit':[0, np.inf]},
+            'r_p': {'guess':[1000, 1000], 'unit': u.kpc, 'limit':[0, np.inf]},
+            'a': {'guess':[1, 0.5], 'unit': None, 'limit':[0, 10]},
+            'b': {'guess':[5, 0.5], 'unit': None, 'limit':[2, 8]},
+            'c': {'guess':[0.5, 0.5], 'unit': None, 'limit':[0, 2]},
+            'RA': {'guess':[RA.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                   'limit':[RA.to_value('deg')-0.5/60, RA.to_value('deg')+0.5/60]},
+            'Dec': {'guess':[Dec.to_value('deg'), 0.5/60], 'unit': u.deg, 
+                    'limit':[Dec.to_value('deg')-0.5/60, Dec.to_value('deg')+0.5/60]},
+            'min_to_maj_axis_ratio':{'guess':[0.5,0.1], 'unit':None, 'limit':[0,1]}, 
+            'angle':{'guess':[20,10], 'unit':u.deg, 'limit':[-90,90]},
+            'ZL':{'guess':[0,1e-5],'unit':None},
+        }
+        
+    return fitpar_prof
 
 
 #============================================================

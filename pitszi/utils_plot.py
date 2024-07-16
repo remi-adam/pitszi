@@ -13,6 +13,7 @@ import corner
 import seaborn as sns
 import pandas as pd
 import warnings
+import copy
 
 from pitszi import utils
 
