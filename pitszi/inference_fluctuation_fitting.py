@@ -485,7 +485,7 @@ class InferenceFluctuationFitting(object):
         
         #========== Get the model
         if kind == 'brute':
-            pk2d_test = self.get_pk2d_model_brute(physical=True, seed=None)[1].to_value('kpc2')
+            pk2d_test = self.get_pk2d_model_brute(physical=True)[1].to_value('kpc2')
         elif kind == 'projection':
             pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
         else:
