@@ -519,10 +519,10 @@ def seaborn_corner(dfs, output_fig=None, ci2d=[0.95, 0.68], ci1d=0.68,
                     ax.grid(False)
 
                 if truth is not None:
-                    if truth_style is 'line':
+                    if truth_style == 'line':
                         ax.vlines(truth[jp], ax.get_ylim()[0], ax.get_ylim()[1], linestyle=':', color='k')
                         ax.hlines(truth[ip], ax.get_xlim()[0], ax.get_xlim()[1], linestyle=':', color='k')
-                    if truth_style is 'star':
+                    if truth_style == 'star':
                         ax.plot(truth[jp], truth[ip], linestyle='', marker="*", color='k', markersize=10)
                     
                 if jp > 0:

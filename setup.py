@@ -33,5 +33,11 @@ setup(
         'scipy',
         'astropy >= 1.2.1',
         'matplotlib',
+        'emcee',
+        'pandas',
+        'seaborn',
+        'dill',
+        'pathos',
+        'minot'
     ]
 )
