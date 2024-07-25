@@ -62,7 +62,7 @@ pip install pitszi
 ```
 
 #### Reference
-PITSZI: Probing ICM Turbulence from Sunyaev-Zel'dovich Imaging -- Application to the triple merging cluster MACS J0717.5+3745
+PITSZI: Probing ICM Turbulence from Sunyaev-Zel'dovich Imaging -- Application to the triple merging cluster MACS J0717.5+3745, 
 Adam et al. (in prep)
 
 #### History
