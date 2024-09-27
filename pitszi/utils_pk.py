@@ -858,9 +858,9 @@ def extract_pk2d_arevalo(image, proj_reso,
             kmax_sampling = kmax
 
         # get the bins
-        if scalebin is 'lin':
+        if scalebin == 'lin':
             kbins = np.linspace(kmin_sampling, kmax_sampling, Nbin+1)
-        elif scalebin is 'log':
+        elif scalebin == 'log':
             kbins = np.logspace(np.log10(kmin_sampling), np.log10(kmax_sampling), Nbin+1)
         else:
             raise ValueError("Only lin or log scales are allowed")
