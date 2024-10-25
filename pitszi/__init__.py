@@ -20,6 +20,7 @@ except ImportError:
     print('             $ conda install scipy                               ')
     print('             $ conda install matplotlib                          ')
     print('             $ conda install emcee                               ')
+    print('             $ conda install corner                              ')
     print('             $ conda install pandas                              ')
     print('             $ conda install seaborn                             ')
     print('             $ conda install dill                                ')
