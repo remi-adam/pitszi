@@ -34,6 +34,7 @@ setup(
         'astropy >= 1.2.1',
         'matplotlib',
         'emcee',
+        'corner',
         'pandas',
         'seaborn',
         'dill',
