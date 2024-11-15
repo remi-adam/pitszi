@@ -11,6 +11,7 @@ is dedicated to the computing of mock observables.
 import numpy as np
 from scipy.interpolate import interp1d
 from astropy.coordinates import SkyOffsetFrame, SkyCoord
+from astropy.wcs import WCS
 import astropy.units as u
 import astropy.constants as cst
 from scipy.spatial.transform import Rotation as R
@@ -164,30 +165,9 @@ class ModelSampling(object):
         header = self.get_map_header()
         Nx = header['NAXIS1']
         Ny = header['NAXIS2']
-        ramap, decmap = map_tools.get_radec_map(header) # indexing is xy in this function
-
-        #----- Case of even even
-        if (Nx/2.0 == int(Nx/2.0)) and (Ny/2.0 == int(Ny/2.0)):
-            ramap_center  = np.mean(ramap[int(Ny/2.0)-1:int(Ny/2.0), int(Nx/2.0)-1:int(Nx/2.0)])
-            decmap_center = np.mean(decmap[int(Ny/2.0)-1:int(Ny/2.0), int(Nx/2.0)-1:int(Nx/2.0)])
-     
-        #----- Case of odd odd
-        if (Nx/2.0 != int(Nx/2.0)) and (Ny/2.0 != int(Ny/2.0)):
-            ramap_center  = ramap[int(Ny/2.0), int(Nx/2.0)]
-            decmap_center = decmap[int(Ny/2.0), int(Nx/2.0)]
-     
-        #----- Case of even odd
-        if (Nx/2.0 == int(Nx/2.0)) and (Ny/2.0 != int(Ny/2.0)):
-            ramap_center  = np.mean(ramap[int(Ny/2.0), int(Nx/2.0)-1:int(Nx/2.0)])
-            decmap_center = np.mean(decmap[int(Ny/2.0), int(Nx/2.0)-1:int(Nx/2.0)])
-     
-        #----- Case of odd even
-        if (Nx/2.0 != int(Nx/2.0)) and (Ny/2.0 == int(Ny/2.0)):
-            ramap_center  = np.mean(ramap[int(Ny/2.0)-1:int(Ny/2.0), int(Nx/2.0)])
-            decmap_center = np.mean(decmap[int(Ny/2.0)-1:int(Ny/2.0), int(Nx/2.0)])
-                
-        map_center = SkyCoord(ramap_center*u.deg, decmap_center*u.deg, frame='icrs')
-     
+        center_pix = tuple((np.array([Nx, Ny]) - 1.0) / 2)[::-1]
+        map_center = SkyCoord.from_pixel(center_pix[0], center_pix[1], WCS(header))
+        
         return map_center        
 
     
