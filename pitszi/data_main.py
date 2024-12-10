@@ -650,7 +650,8 @@ class Data():
     
     def set_noise_model_from_mc(self,
                                 Nbin=30,
-                                scale='log'):
+                                scale='log',
+                                auto_norm=True):
         """
         Derive the noise model by interpolating the noise PK from MC realizations
         after homogeneizing the noise        
@@ -659,7 +660,8 @@ class Data():
         ----------
         - Nbin (int): number of bin for the Pk
         - scale (str): log or lin, to define the scale used in Pk
-        
+        - auto_norm (bool): apply a normalization from the rms map computed from MC directly
+
         Outputs
         ----------
         The noise model is set from the MC
@@ -673,7 +675,10 @@ class Data():
         Nmc, Ny, Nx = self.noise_mc.shape
         if Nmc < 2: raise ValueError('The number of MC should be large, at least larger than 1.')
         reso = np.abs(self.header['CDELT1'])*3600
-        normmap = np.std(self.noise_mc, axis=0)
+        if auto_norm:
+            normmap = np.std(self.noise_mc, axis=0)
+        else:
+            normmap = np.std(self.noise_mc, axis=0) * 0 + 1
         
         w = (normmap > 0) * ~np.isnan(normmap) * ~np.isinf(normmap)
         if not self.silent:
