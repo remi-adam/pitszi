@@ -61,7 +61,10 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     - helium_mass_fraction (float): the helium mass fraction of the gas (==Yp~0.25 in BBN)
     - metallicity_sol (float): the metallicity (default is Zprotosun == 0.0153)
     - abundance (float): the abundance (default is 0.3) in unit of Zprotosun
+    - model_gamma_fluctuation (float): the value of Gamma as in dP/P = Gamma dn/n
     - model_pressure_profile (dict): the model used for the thermal gas electron pressure 
+    profile. It contains the name of the model and the associated model parameters. 
+    - model_density_profile (dict): the model used for the thermal gas electron density 
     profile. It contains the name of the model and the associated model parameters. 
     - model_pressure_fluctuation (dict): the model used for the thermal gas electron pressure 
     fluctuations. It contains the name of the model and the associated model parameters. 
@@ -165,7 +168,9 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         self._model_gamma_fluctuation = 5/3.0 # dP/P = Gamma dn/n [0=isobar, 1 isothermal, 5/3 adiabatic]
         
         self._model_pressure_profile = 1
+        self._model_density_profile  = 1
         self.set_pressure_profile_universal_param(pressure_model='P13UPP')
+        self.set_density_profile_universal_param(density_model='G19UDP')
         
         dPpar = self._validate_model_fluctuation_parameters({"name":'CutoffPowerLaw',
                                                              "statistics":'gaussian', # or lognormal
@@ -364,6 +369,10 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     @property
     def model_pressure_profile(self):
         return self._model_pressure_profile
+
+    @property
+    def model_density_profile(self):
+        return self._model_density_profile
     
     @property
     def model_pressure_fluctuation(self):
@@ -755,6 +764,20 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         
         # Information
         if not self._silent: print("Setting model_pressure_profile value")
+        if not self._silent: print("Fixing: R500 if involved")
+
+    @model_density_profile.setter
+    def model_density_profile(self, value):
+        # check type
+        if type(value) != dict :
+            raise TypeError("The model of density profile should be a dictionary with relevant keys")
+        
+        # Check the input parameters and use it
+        Ppar = self._validate_model_profile_parameters(value, 'cm-3')
+        self._model_density_profile = Ppar
+        
+        # Information
+        if not self._silent: print("Setting model_density_profile value")
         if not self._silent: print("Fixing: R500 if involved")
 
     @model_pressure_fluctuation.setter
