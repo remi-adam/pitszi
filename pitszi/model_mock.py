@@ -35,13 +35,14 @@ class ModelMock(object):
     Methods
     ----------
     - get_pressure_profile
+    - get_density_profile
     - get_pressure_fluctuation_spectrum
     - get_pressure_cube_profile
     - get_pressure_cube_fluctuation
     - get_sz_map
     
     """
-    
+
     #==================================================
     # Get the electron pressure profile
     #==================================================
@@ -71,7 +72,111 @@ class ModelMock(object):
 
         return radius, p_r.to('keV cm-3')
 
+    
+    #==================================================
+    # Get the electron density profile
+    #==================================================
 
+    def get_density_profile(self,
+                            radius=np.logspace(0,4,100)*u.kpc):
+        """
+        Get the thermal electron density profile.
+        
+        Parameters
+        ----------
+        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - n_r (quantity): the electron density profile in unit of cm-3
+
+        """
+        
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        # get profile
+        n_r = self._get_generic_profile(radius, self._model_density_profile)
+        n_r[radius > self._R_truncation] *= 0
+
+        return radius, n_r.to('cm-3')
+
+
+    #==================================================
+    # Get the electron temperature profile
+    #==================================================
+    
+    def get_temperature_profile(self,
+                                radius=np.logspace(0,4,100)*u.kpc):
+        """
+        Get the thermal temperature profile.
+        
+        Parameters
+        ----------
+        - radius (quantity): the physical 3d radius in units homogeneous to kpc, as a 1d array
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - T_r (quantity): the temperature profile in unit of keV
+
+        """
+        
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        # Compute n and P
+        radius, n_r = self.get_density_profile(radius=radius)
+        radius, P_r = self.get_pressure_profile(radius=radius)
+
+        # Get Temperature
+        n_r[n_r <= 0] = np.nan
+        T_r = P_r / n_r
+
+        # Apply truncation
+        T_r[radius > self._R_truncation] = np.nan
+        
+        return radius, T_r.to('keV')
+
+    
+    #==================================================
+    # Get the entropy profile
+    #==================================================
+    
+    def get_entropy_profile(self,
+                            radius=np.logspace(0,4,100)*u.kpc):
+        """
+        Get the entropy profile.
+        
+        Parameters
+        ----------
+        - radius (quantity): the physical 3d radius in units homogeneous to kpc, as a 1d array
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - K_r (quantity): the entropy profile in unit of keV cm2
+
+        """
+
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        # Compute n and P
+        radius, n_r = self.get_density_profile(radius=radius)
+        radius, P_r = self.get_pressure_profile(radius=radius)
+
+        # Get K
+        n_r[n_r <= 0] = np.nan
+        K_r = P_r / n_r**(5.0/3)
+
+        # Apply truncation
+        K_r[radius > self._R_truncation] = np.nan
+        
+        return radius, K_r.to('keV cm2')
+
+    
     #==================================================
     # Get the electron pressure fluctuation spectrum
     #==================================================

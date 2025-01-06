@@ -236,7 +236,348 @@ class ModelLibrary(object):
 
         
 
+    #==================================================
+    # Set a given pressure polytropic profile
+    #==================================================
+    
+    def set_pressure_profile_polytropic_param(self, polytropic_model='G19'):
+        """
+        Set the parameters of the pressure profile so that 
+        the cluster follows the polytropc relation, using the 
+        density as the input quantity. See
+        Ghirardini et al. (2019) for details.
+        
+        Parameters
+        ----------
+        - polytropic_model (str): model to follow
 
+        """
+
+        #---------- Get the model parameters
+        # Ghirardini et al. 2019 (see section 3 and tab 3)
+        if polytropic_model is 'G19':
+
+            E_z   = self._cosmo.efunc(self._redshift)
+            h70   = self._cosmo.H0.value/70.0
+            mu_g,mu_e,mu_p,mu_a = cluster_global.mean_molecular_weight(Y=self._helium_mass_fraction,
+                                                                       Z=self._metallicity_sol*self._abundance)        
+            try:
+                fb = self._cosmo.Ob0/self._cosmo.Om0
+            except:
+                fb = 0.16
+            
+            P500  = 3.426*1e-3 * (self._M500.to_value('Msun')*h70/1e15)**(2.0/3) * E_z**(8.0/3)*(fb/0.16)*(mu_g/0.6)*(mu_e/1.14)
+            P0    = np.exp(-2.94)
+            n0    = np.exp(-10.3)
+            Gamma = 1.19
+
+            constant = P500*P0 * (n0*E_z**2)**(-Gamma)*u.keV*u.cm**-3
+
+        # No other relation available
+        else:
+            raise ValueError('Only the Ghirardini et al. 2019 relation is available: polytropic_model="G19"')
+
+        #---------- Set the model parameters
+        # Get the density parameters
+        Ppar = self._model_density_profile.copy()
+
+        # Modify the parameters depending on the model
+        if self._model_density_profile['name'] == 'GNFW':
+            Ppar['P_0'] = constant * (Ppar['P_0'].to_value('cm**-3'))**Gamma
+            Ppar['b']  *= Gamma
+            Ppar['c']  *= Gamma
+            
+        elif self._model_density_profile['name'] == 'SVM':
+            Ppar['n_0'] = constant * (Ppar['n_0'].to_value('cm**-3'))**Gamma
+            Ppar['beta'] *= Gamma
+            Ppar['alpha'] *= Gamma
+            Ppar['epsilon'] *= Gamma
+            
+        elif self._model_density_profile['name'] == 'beta':
+            Ppar['n_0'] = constant * (Ppar['n_0'].to_value('cm**-3'))**Gamma
+            Ppar['beta'] *= Gamma
+            
+        elif self._model_density_profile['name'] == 'doublebeta':
+            if self._silent is False:
+                print('!!! Analytical polytropic transformation not available with doublebeta model. !!!')
+                print('!!! Definition done via a User defined model in 0.1-10000 kpc!!!')
+            rad, prof = self.get_density_profile(radius=np.logspace(np.log10(self._Rmin.to_value('kpc')/5),
+                                                                    np.log10(self._R_truncation.to_value('kpc')*5),
+                                                                    1000)*u.kpc)
+            profile = constant * prof.to_value('cm-3')**Gamma
+            Ppar = {'name':'User', 'radius':rad, 'profile':profile}
+
+        elif self._model_density_profile['name'] == 'User':
+             Ppar['profile'] = constant*(Ppar['profile'].to_value('cm-3'))**Gamma
+
+        else:
+            raise ValueError('Problem with pressure model list.')
+
+        self._model_pressure_profile = Ppar
+        
+
+    #==================================================
+    # Set a given density polytropic profile
+    #==================================================
+    
+    def set_density_profile_polytropic_param(self, polytropic_model='G19'):
+        """
+        Set the parameters of the density profile so that 
+        the cluster follows the polytropc relation using the 
+        pressure as the input quantity. See
+        Ghirardini et al. (2019) for details.
+        
+        Parameters
+        ----------
+        - polytropic_model (str): model to follow
+
+        """
+
+        #---------- Get the model parameters
+        # Ghirardini et al. 2019 (see section 3 and tab 3)
+        if polytropic_model is 'G19':
+
+            E_z   = self._cosmo.efunc(self._redshift)
+            h70   = self._cosmo.H0.value/70.0
+            mu_g,mu_e,mu_p,mu_a = cluster_global.mean_molecular_weight(Y=self._helium_mass_fraction,
+                                                                       Z=self._metallicity_sol*self._abundance)        
+            try:
+                fb = self._cosmo.Ob0/self._cosmo.Om0
+            except:
+                fb = 0.16
+            
+            P500  = 3.426*1e-3 * (self._M500.to_value('Msun')*h70/1e15)**(2.0/3) * E_z**(8.0/3)*(fb/0.16)*(mu_g/0.6)*(mu_e/1.14)
+            P0    = np.exp(-2.94)
+            n0    = np.exp(-10.3)
+            Gamma = 1.19
+
+            constant = n0*E_z**2*(P500*P0)**(-1/Gamma)*u.cm**-3
+
+        # No other relation available
+        else:
+            raise ValueError('Only the Ghirardini et al. 2019 relation is available: polytropic_model="G19"')
+
+        #---------- Set the model parameters
+        # Get the pressure parameters
+        Ppar = self._model_pressure_profile.copy()
+
+        # Modify the parameters depending on the model
+        if self._model_pressure_profile['name'] == 'GNFW':
+            Ppar['P_0'] = constant * (Ppar['P_0'].to_value('keV cm**-3'))**(1/Gamma)
+            Ppar['b']  *= 1/Gamma
+            Ppar['c']  *= 1/Gamma
+            
+        elif self._model_pressure_profile['name'] == 'SVM':
+            Ppar['n_0'] = constant * (Ppar['n_0'].to_value('keV cm**-3'))**(1/Gamma)
+            Ppar['beta'] *= 1/Gamma
+            Ppar['alpha'] *= 1/Gamma
+            Ppar['epsilon'] *= 1/Gamma
+            
+        elif self._model_pressure_profile['name'] == 'beta':
+            Ppar['n_0'] = constant * (Ppar['n_0'].to_value('keV cm**-3'))**(1/Gamma)
+            Ppar['beta'] *= 1/Gamma
+            
+        elif self._model_pressure_profile['name'] == 'doublebeta':
+            if self._silent is False:
+                print('!!! Analytical polytropic transformation not available with doublebeta model. !!!')
+                print('!!! Definition done via a User defined model in 0.1-10000 kpc!!!')
+            rad, prof = self.get_pressure_profile(radius=np.logspace(np.log10(self._Rmin.to_value('kpc')/5),
+                                                                     np.log10(self._R_truncation.to_value('kpc')*5),
+                                                                     1000)*u.kpc)
+            profile = constant * prof.to_value('keV cm-3')**(1/Gamma)
+            Ppar = {'name':'User', 'radius':rad, 'profile':profile}
+
+        elif self._model_pressure_profile['name'] == 'User':
+             Ppar['profile'] = constant*(Ppar['profile'].to_value('keV cm-3'))**(1/Gamma)
+
+        else:
+            raise ValueError('Problem with pressure model list.')
+
+        self._model_density_profile = Ppar
+
+
+    #==================================================
+    # Set a given pressure isothermal profile
+    #==================================================
+    
+    def set_pressure_profile_isoT_param(self, kBT):
+        """
+        Set the parameters of the pressure profile so that 
+        the cluster is iso thermal
+        
+        Parameters
+        ----------
+        - kBT (quantity): isothermal temperature
+
+        """
+
+        # check type of temperature
+        try:
+            test = kBT.to('keV')
+        except:
+            raise TypeError("The temperature should be a quantity homogeneous to keV.")
+
+        # Get the density parameters
+        Ppar = self._model_density_profile.copy()
+
+        # Modify the parameters depending on the model
+        if self._model_density_profile['name'] == 'GNFW':
+            Ppar['P_0'] = (Ppar['P_0'] * kBT).to('keV cm-3')
+            
+        elif self._model_density_profile['name'] == 'SVM':
+            Ppar['n_0'] = (Ppar['n_0'] * kBT).to('keV cm-3')
+
+        elif self._model_density_profile['name'] == 'beta':
+            Ppar['n_0'] = (Ppar['n_0'] * kBT).to('keV cm-3')
+
+        elif self._model_density_profile['name'] == 'doublebeta':
+            Ppar['n_01'] = (Ppar['n_01'] * kBT).to('keV cm-3')
+            Ppar['n_02'] = (Ppar['n_02'] * kBT).to('keV cm-3')
+
+        elif self._model_density_profile['name'] == 'User':
+             Ppar['profile'] = (Ppar['profile'] * kBT).to('keV cm-3')
+            
+        else:
+            raise ValueError('Problem with density model list.')
+
+        self._model_pressure_profile = Ppar
+
+
+    #==================================================
+    # Set a given density isothermal profile
+    #==================================================
+    
+    def set_density_profile_isoT_param(self, kBT):
+        """
+        Set the parameters of the density profile so that 
+        the cluster is iso thermal
+        
+        Parameters
+        ----------
+        - kBT (quantity): isothermal temperature
+
+        """
+
+        # check type of temperature
+        try:
+            test = kBT.to('keV')
+        except:
+            raise TypeError("The temperature should be a quantity homogeneous to keV.")
+
+        # Get the density parameters
+        Ppar = self._model_pressure_profile.copy()
+
+        # Modify the parameters depending on the model
+        if self._model_pressure_profile['name'] == 'GNFW':
+            Ppar['P_0'] = (Ppar['P_0'] / kBT).to('cm-3')
+            
+        elif self._model_pressure_profile['name'] == 'SVM':
+            Ppar['n_0'] = (Ppar['n_0'] / kBT).to('cm-3')
+
+        elif self._model_pressure_profile['name'] == 'beta':
+            Ppar['n_0'] = (Ppar['n_0'] / kBT).to('cm-3')
+
+        elif self._model_pressure_profile['name'] == 'doublebeta':
+            Ppar['n_01'] = (Ppar['n_01'] / kBT).to('cm-3')
+            Ppar['n_02'] = (Ppar['n_02'] / kBT).to('cm-3')
+
+        elif self._model_pressure_profile['name'] == 'User':
+             Ppar['profile'] = (Ppar['profile'] / kBT).to('cm-3')
+            
+        else:
+            raise ValueError('Problem with density model list.')
+
+        self._model_density_profile = Ppar
+        
+
+    #==================================================
+    # Set a given pressure profile according to temperature
+    #==================================================
+    
+    def set_pressure_profile_from_temperature_model(self, kBT_model):
+        """
+        Set the pressure profile so that 
+        the cluster is defined via the density and the 
+        temperature profiles.
+        This function always uses a User defined model
+        (i.e. implying interpolation) to define the pressure.
+        
+        Parameters
+        ----------
+        - kBT_model (dict): temperature profile
+
+        """
+
+        #---------- Inputs validation
+        kBT_model = self._validate_model_profile_parameters(kBT_model, 'keV')
+
+        #---------- Extract kBT_r and n_r
+        radius = np.logspace(np.log10(self._Rmin.to_value('kpc')/5), np.log10(self._R_truncation.to_value('kpc')*5), 1000)*u.kpc
+        kBT_r = self._get_generic_profile(radius, kBT_model, derivative=False)
+        rad0, n_e_r = self.get_density_profile(radius)       
+        
+        #---------- Compute the pressure profile       
+        profile = n_e_r * kBT_r
+        Ppar = {'name':'User', 'radius':radius, 'profile':profile.to('keV cm-3')}
+        
+        #---------- Set the density model
+        self._model_pressure_profile = Ppar
+
+
+    #==================================================
+    # Set a given density profile according to temperature
+    #==================================================
+    
+    def set_density_profile_from_temperature_model(self, kBT_model):
+        """
+        Set the density profile so that 
+        the cluster is defined via the pressure and the 
+        temperature profiles.
+        This function always uses a User defined model
+        (i.e. implying interpolation) to define the density.
+        
+        Parameters
+        ----------
+        - kBT_model (dict): temperature profile
+
+        """
+
+        #---------- Inputs
+        kBT_model = self._validate_model_profile_parameters(kBT_model, 'keV')
+        
+        #---------- Extract kBT_r and P_r
+        radius = np.logspace(np.log10(self._Rmin.to_value('kpc')/5), np.log10(self._R_truncation.to_value('kpc')*5), 1000)*u.kpc
+        kBT_r = self._get_generic_profile(radius, kBT_model, derivative=False)
+        rad0, p_e_r = self.get_pressure_profile(radius)       
+        
+        #---------- Compute the pressure profile       
+        profile = p_e_r / kBT_r
+        Dpar = {'name':'User', 'radius':radius, 'profile':profile.to('cm-3')}        
+
+        #---------- Set the density model
+        self._model_density_profile = Dpar
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 
 
 
