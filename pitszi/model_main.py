@@ -162,6 +162,8 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         self._abundance = 0.3
         
         #---------- P3D physical properties
+        self._model_gamma_fluctuation = 5/3.0 # dP/P = Gamma dn/n [0=isobar, 1 isothermal, 5/3 adiabatic]
+        
         self._model_pressure_profile = 1
         self.set_pressure_profile_universal_param(pressure_model='P13UPP')
         
@@ -355,6 +357,10 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         return self._metallicity_sol
     
     #========== ICM physics
+    @property
+    def model_gamma_fluctuation(self):
+        return self._model_gamma_fluctuation
+    
     @property
     def model_pressure_profile(self):
         return self._model_pressure_profile
@@ -725,6 +731,18 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         if not self._silent: print("Setting abundance value")
         
     #========== ICM physics
+    @model_gamma_fluctuation.setter
+    def model_gamma_fluctuation(self, value):
+        # check type
+        if type(value) != float and type(value) != int and type(value) != np.float64:
+            raise TypeError("The model of Gamma should be a float (0=isobaric, 1=isothermal, 5/3=adiabatic)")
+
+        # Set parameters
+        self._model_gamma_fluctuation = value
+
+        # Information
+        if not self._silent: print("Setting model_gamma_fluctuation value")
+
     @model_pressure_profile.setter
     def model_pressure_profile(self, value):
         # check type
