@@ -219,23 +219,6 @@ class ModelLibrary(object):
         self._model_density_profile = gas_model
 
 
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
     #==================================================
     # Set a given pressure polytropic profile
     #==================================================
@@ -557,35 +540,6 @@ class ModelLibrary(object):
         #---------- Set the density model
         self._model_density_profile = Dpar
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-        
     
     #==================================================
     # Validate profile model parameters

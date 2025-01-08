@@ -15,6 +15,8 @@ import astropy.units as u
 import astropy.constants as cst
 from scipy.spatial.transform import Rotation
 
+from minot.ClusterTools import cluster_global
+
 from pitszi import utils
 from pitszi import utils_pk
 
@@ -176,6 +178,49 @@ class ModelMock(object):
         
         return radius, K_r.to('keV cm2')
 
+
+    #==================================================
+    # Get the hydrostatic mass profile
+    #==================================================
+
+    def get_Mhse_profile(self,
+                         radius=np.logspace(0,4,100)*u.kpc):
+        """
+        Get the hydrostatic mass profile using exact analytical expressions.
+        
+        Parameters
+        ----------
+        - radius (quantity): the physical 3d radius in units homogeneous to kpc, as a 1d array
+        
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - Mhse_r (quantity): the hydrostatic mass profile in unit of Msun
+
+        """
+
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+        
+        #---------- Mean molecular weights
+        mu_gas,mu_e,mu_p,mu_alpha = cluster_global.mean_molecular_weight(Y=self._helium_mass_fraction,
+                                                                         Z=self._metallicity_sol*self._abundance)
+
+        #---------- Get the electron density profile
+        radius, n_r = self.get_density_profile(radius=radius)
+
+        #---------- Get dP/dr
+        dpdr_r = self._get_generic_profile(radius, self._model_pressure_profile, derivative=True)
+        dpdr_r[radius > self._R_truncation] *= 0
+
+        #---------- Compute the mass
+        n_r[n_r <= 0] = np.nan
+        Mhse_r = -radius**2 / n_r * dpdr_r / (mu_gas*cst.m_p*cst.G)
+        
+        Mhse_r[radius > self._R_truncation] = np.nan
+        
+        return radius, Mhse_r.to('Msun')
+    
     
     #==================================================
     # Get the electron pressure fluctuation spectrum
