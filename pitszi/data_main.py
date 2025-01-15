@@ -886,7 +886,6 @@ class Data():
 
     def set_image_to_mock(self,
                           model_input,
-                          model_seed=None,
                           model_no_fluctuations=False,
                           use_model_header=False,
                           noise_origin='model',
@@ -898,14 +897,12 @@ class Data():
         Parameters
         ----------
         - model (class Model object): the model
-        - model_seed (bool): set to a number for reproducible fluctuations
         - model_no_fluctuations (bool): set to true when the pure spherical model is requested
         - use_model_header (bool): set to true to replacde data header 
         with the current model header. Otherwise the model header is 
         set to the one of the data.
         - noise_origin (str): can be 'covariance', 'model', 'MC', or 'none'
         - noise_center (SkyCoord): the reference center for the noise
-        - model_seed (bool): set to a number for reproducible noise
 
         """
         
@@ -924,7 +921,7 @@ class Data():
             model.map_header = self.header
             
         # Get the raw image model
-        input_model = model.get_sz_map(seed=model_seed, no_fluctuations=model_no_fluctuations)
+        input_model = model.get_sz_map(no_fluctuations=model_no_fluctuations)
         
         # Convolve with instrument response function
         convolved_model = utils_pk.apply_transfer_function(input_model,

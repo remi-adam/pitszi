@@ -62,6 +62,7 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     - metallicity_sol (float): the metallicity (default is Zprotosun == 0.0153)
     - abundance (float): the abundance (default is 0.3) in unit of Zprotosun
     - model_gamma_fluctuation (float): the value of Gamma as in dP/P = Gamma dn/n
+    - model_seed_fluctuation (int): seed for fluctuation to ensure consistency between dP/P, dn/n, dT/T
     - model_pressure_profile (dict): the model used for the thermal gas electron pressure 
     profile. It contains the name of the model and the associated model parameters. 
     - model_density_profile (dict): the model used for the thermal gas electron density 
@@ -164,8 +165,9 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         self._metallicity_sol = 0.0153
         self._abundance = 0.3
         
-        #---------- P3D physical properties
+        #---------- 3D physical properties
         self._model_gamma_fluctuation = 5/3.0 # dP/P = Gamma dn/n [0=isobar, 1 isothermal, 5/3 adiabatic]
+        self._model_seed_fluctuation = np.random.randint(0, 2**32-1)
         
         self._model_pressure_profile = 1
         self._model_density_profile  = 1
@@ -278,7 +280,26 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
             par = dill.load(pfile)
             
         self.__dict__ = par
+
+
+    #==================================================
+    # New seed
+    #==================================================
+    
+    def new_seed(self):
+        """
+        Reset the seed to get another random fluctuation state
         
+        Parameters
+        ----------
+            
+        Outputs
+        ----------
+            
+        """
+
+        self.model_seed_fluctuation = np.random.randint(0, 2**32-1)
+
         
     #==================================================
     # Get the hidden variable
@@ -365,6 +386,10 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     @property
     def model_gamma_fluctuation(self):
         return self._model_gamma_fluctuation
+
+    @property
+    def model_seed_fluctuation(self):
+        return self._model_seed_fluctuation
     
     @property
     def model_pressure_profile(self):
@@ -751,6 +776,22 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
 
         # Information
         if not self._silent: print("Setting model_gamma_fluctuation value")
+
+    @model_seed_fluctuation.setter
+    def model_seed_fluctuation(self, value):
+        # check type
+        if type(value) != int:
+            raise TypeError("The model seed fluctuation should be an integer in [0,2**32-1]")
+
+        # Check value
+        if value < 0 or value > 2**32-1:
+            raise TypeError("The model seed fluctuation should be an integer in [0,2**32-1]")
+
+        # Set parameters
+        self._model_seed_fluctuation = value
+
+        # Information
+        if not self._silent: print("Setting model_seed_fluctuation value")
 
     @model_pressure_profile.setter
     def model_pressure_profile(self, value):

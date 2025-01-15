@@ -1048,15 +1048,14 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
             # Account or not for TF and beam
             if self.method_data_deconv:
-                test_ymap1 = self.model.get_sz_map(no_fluctuations=False)
+                test_ymap1 = self.model.get_sz_map(no_fluctuations=False, new_seed=True)
                 test_ymap2 = test_ymap1
             else:
-                seed = int(np.random.uniform(0,1000000))
-                test_ymap1 = self.model.get_sz_map(seed=seed, no_fluctuations=False,
+                test_ymap1 = self.model.get_sz_map(no_fluctuations=False, new_seed=True,
                                                    irfs_convolution_beam=self.data1.psf_fwhm,
                                                    irfs_convolution_TF=self.data1.transfer_function)
                 if self._cross_spec:
-                    test_ymap2 = self.model.get_sz_map(seed=seed, no_fluctuations=False,
+                    test_ymap2 = self.model.get_sz_map(no_fluctuations=False, new_seed=False,
                                                        irfs_convolution_beam=self.data2.psf_fwhm,
                                                        irfs_convolution_TF=self.data2.transfer_function)
                 else:

@@ -298,7 +298,7 @@ class InferenceRadial(InferenceRadialFitting):
         """
 
         #----- Get the cluster model
-        model_img = self.model.get_sz_map(seed=None, no_fluctuations=True, force_isotropy=False,
+        model_img = self.model.get_sz_map(no_fluctuations=True, force_isotropy=False,
                                           irfs_convolution_beam=self.data.psf_fwhm,
                                           irfs_convolution_TF=self.data.transfer_function)
                 
