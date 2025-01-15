@@ -38,11 +38,27 @@ class ModelMock(object):
     ----------
     - get_pressure_profile
     - get_density_profile
+    - get_temperature_profile
+    - get_entropy_profile
+    - get_Mhse_profile
+    - get_overdensity_profile
+    - get_Mgas_profile
+    - get_fgas_profile
+    - get_Ethermal_profile
     - get_pressure_fluctuation_spectrum
     - get_pressure_cube_profile
     - get_pressure_cube_fluctuation
     - get_sz_map
     
+    To Do
+    ----------
+    - get_density_fluctuation_spectrum
+    - get_density_cube_profile
+    - get_density_cube_fluctuation
+    - get_temperature_fluctuation_spectrum
+    - get_temperature_cube_profile
+    - get_temperature_cube_fluctuation
+
     """
 
     #==================================================
@@ -220,7 +236,167 @@ class ModelMock(object):
         Mhse_r[radius > self._R_truncation] = np.nan
         
         return radius, Mhse_r.to('Msun')
+
+
+    #==================================================
+    # Get the HSE overdensity contrast profile
+    #==================================================
+
+    def get_overdensity_profile(self,
+                                radius=np.logspace(0,4,100)*u.kpc,
+                                bHSE=0.0):
+        """
+        Get the overdensity contrast profile.
+        
+        Parameters
+        ----------
+        - radius (quantity): the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - bHSE (flaat): hydrostatic mass bias to use (assumed constant)
+        
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - delta_r: the overdensity contrast profile
+
+        """
+
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        # Compute delta from the mass profile
+        r, mhse = self.get_Mhse_profile(radius)
+        rho_c = self._cosmo.critical_density(self._redshift)
+        delta_r = mhse/(1.0-bHSE) / (4.0/3.0*np.pi*radius**3 * rho_c)
+
+        return radius, delta_r.to_value('')*u.adu
     
+    
+    #==================================================
+    # Compute Mgas
+    #==================================================
+    
+    def get_Mgas_profile(self,
+                         radius=np.logspace(0,4,100)*u.kpc,
+                         Npt_per_decade_integ=30):
+        """
+        Get the gas mass profile by integrating the density.
+        
+        Parameters
+        ----------
+        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - Npt_per_decade_integ (int): number of point per decade used for integration
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - Mgas_r (quantity): the gas mass profile 
+        
+        """
+
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        #---------- Mean molecular weights
+        mu_gas,mu_e,mu_p,mu_alpha = cluster_global.mean_molecular_weight(Y=self._helium_mass_fraction,
+                                                                         Z=self._metallicity_sol*self._abundance)
+        
+        #---------- Integrate the mass
+        I_n_gas_r = np.zeros(len(radius))
+        for i in range(len(radius)):
+            # make sure we go well bellow rmax
+            rmin = np.amin([self._Rmin.to_value('kpc'), radius.to_value('kpc')[i]/10.0])*u.kpc 
+            rad = utils.sampling_array(rmin, radius[i], NptPd=Npt_per_decade_integ, unit=True)
+            # To avoid ringing at Rtrunc, insert it if we are above
+            if np.amax(rad) > self._R_truncation:
+                rad = rad.insert(0, self._R_truncation)
+                rad.sort()
+            rad, n_r = self.get_density_profile(radius=rad)
+            I_n_gas_r[i] = utils.trapz_loglog(4*np.pi*rad**2*n_r, rad)
+        
+        Mgas_r = mu_e*cst.m_p * I_n_gas_r
+
+        return radius, Mgas_r.to('Msun')
+
+
+    #==================================================
+    # Compute fgas profile
+    #==================================================
+
+    def get_fgas_profile(self,
+                         radius=np.logspace(0,4,100)*u.kpc,
+                         bHSE=0.0,
+                         Npt_per_decade_integ=30):
+        """
+        Get the gas fraction profile.
+        
+        Parameters
+        ----------
+        - radius : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - bHSE (flaat): hydrostatic mass bias to use (assumed constant)
+        - Npt_per_decade_integ (int): number of point per decade used for integration of Mgas
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - fgas_r (quantity): the gas mass profile 
+
+        """
+
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        # Compute fgas from Mgas and Mhse
+        r, mgas = self.get_Mgas_profile(radius, Npt_per_decade_integ=Npt_per_decade_integ)
+        r, mhse = self.get_Mhse_profile(radius)       
+        fgas_r = mgas.to_value('Msun') / mhse.to_value('Msun') * (1.0 - bHSE) 
+
+        return radius, fgas_r*u.adu
+
+
+    #==================================================
+    # Compute thermal energy profile
+    #==================================================
+
+    def get_Ethermal_profile(self,
+                             radius=np.logspace(0,4,100)*u.kpc,
+                             Npt_per_decade_integ=30):
+        """
+        Compute the thermal energy profile
+        
+        Parameters
+        ----------
+        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - Npt_per_decade_integ (int): number of point per decade used for integration
+
+        Outputs
+        ----------
+        - radius (quantity): the 3d radius in unit of kpc
+        - Uth (quantity) : the thermal energy, in GeV
+
+        """
+        
+        # In case the input is not an array
+        radius = utils.check_qarray(radius, unit='kpc')
+
+        #---------- Mean molecular weights
+        mu_gas,mu_e,mu_p,mu_alpha = cluster_global.mean_molecular_weight(Y=self._helium_mass_fraction,
+                                                                         Z=self._metallicity_sol*self._abundance)
+
+        #---------- Integrate the pressure in 3d
+        Uth_r = np.zeros(len(radius))*u.erg
+        for i in range(len(radius)):
+            # make sure we go well bellow rmax
+            rmin = np.amin([self._Rmin.to_value('kpc'), radius.to_value('kpc')[i]/10.0])*u.kpc 
+            rad = utils.sampling_array(rmin, radius[i], NptPd=Npt_per_decade_integ, unit=True)
+            # To avoid ringing at Rtrunc, insert it if we are above
+            if np.amax(rad) > self._R_truncation:
+                rad = rad.insert(0, self._R_truncation)
+                rad.sort()
+            rad, p_r = self.get_pressure_profile(radius=rad)
+            Uth_r[i] = utils.trapz_loglog((3.0/2.0)*(mu_e/mu_gas) * 4*np.pi*rad**2 * p_r, rad)
+                    
+        return radius, Uth_r.to('erg')
+
     
     #==================================================
     # Get the electron pressure fluctuation spectrum

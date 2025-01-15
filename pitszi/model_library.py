@@ -32,11 +32,19 @@ class ModelLibrary(object):
 
     Methods
     ----------
-    - set_pressure_profile_universal_param(self, pressure_model='P13UPP'): set the gas pressure
-    profile parameters to the universal value from different results
-    - _validate_profile_model_parameters(self, inpar, unit): dedicated to check and validate the parameters
-    of profile models
-    - _get_generic_profile(self, radius, model, derivative=False): get any profile base on model type
+    - set_pressure_profile_universal_param
+    - set_density_profile_universal_param
+    - set_pressure_profile_polytropic_param
+    - set_density_profile_polytropic_param
+    - set_pressure_profile_isoT_param
+    - set_density_profile_isoT_param
+    - set_pressure_profile_from_temperature_model
+    - set_density_profile_from_temperature_model
+    - _validate_profile_model_parameters
+    - _get_generic_profile
+
+    To Do
+    ----------
 
     """
 
@@ -540,7 +548,7 @@ class ModelLibrary(object):
         #---------- Set the density model
         self._model_density_profile = Dpar
 
-    
+        
     #==================================================
     # Validate profile model parameters
     #==================================================
