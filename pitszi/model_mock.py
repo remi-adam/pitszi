@@ -297,7 +297,6 @@ class ModelMock(object):
         """
         Fill the grid with the pressure profile.
         
-        
         Parameters
         ----------
         
