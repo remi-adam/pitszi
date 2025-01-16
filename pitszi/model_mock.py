@@ -47,19 +47,24 @@ class ModelMock(object):
     - get_Ethermal_profile
     - get_pressure_fluctuation_spectrum
     - get_pressure_cube_profile
+    - get_density_cube_profile
+    - get_temperature_cube_profile
+    - get_entropy_cube_profile
     - get_pressure_cube_fluctuation
+    - get_density_cube_fluctuation
+    - get_temperature_cube_fluctuation
+    - get_entropy_cube_fluctuation
     - get_sz_map
+    - get_sx_map
+    - get_Tx_map
     
     To Do
     ----------
     - get_density_fluctuation_spectrum
-    - get_density_cube_profile
-    - get_density_cube_fluctuation
     - get_temperature_fluctuation_spectrum
-    - get_temperature_cube_profile
-    - get_temperature_cube_fluctuation
 
-    - get_Sx_map
+    - Include Sx normalization 
+    - Improve the central pixel definition
 
     """
 
@@ -468,19 +473,20 @@ class ModelMock(object):
     
     
     #==================================================
-    # Pressure profile to grid
+    # Generic ICM profile to grid
     #==================================================
     
-    def get_pressure_cube_profile(self):
+    def _get_icm_cube_profile(self, thermo):
         """
         Fill the grid with the pressure profile.
         
         Parameters
         ----------
-        
+        - thermo (str): tell which profile use ('pressure', 'density', 'temperature', 'entropy')
+
         Outputs
         ----------
-        p_grid (ndarray quantity) : the output pressure grid with keV / cm3 unit attached
+        p_grid (ndarray quantity) : the output profile grid with unit attached
         
         """
 
@@ -528,16 +534,29 @@ class ModelMock(object):
 
         #----- Get the pressure profile in 1d
         rad = utils.sampling_array(self._Rmin, self._R_truncation, NptPd=100, unit=True)
-        rad, p_rad = self.get_pressure_profile(rad)
-        p_rmin = self.get_pressure_profile(self._Rmin)[1]
-        
+        if thermo == 'pressure':
+            rad, p_rad = self.get_pressure_profile(rad)
+            p_rmin = self.get_pressure_profile(self._Rmin)[1]
+        elif thermo == 'density':
+            rad, p_rad = self.get_density_profile(rad)
+            p_rmin = self.get_density_profile(self._Rmin)[1]
+        elif thermo == 'temperature':
+            rad, p_rad = self.get_temperature_profile(rad)
+            p_rmin = self.get_density_profile(self._Rmin)[1]
+        elif thermo == 'entropy':
+            rad, p_rad = self.get_temperature_profile(rad)
+            p_rmin = self.get_density_profile(self._Rmin)[1]
+        else:
+            raise ValueError("Only thermo='pressure', 'density', 'temperature', 'entropy' are implemented")
+        unit = p_rad.unit
+            
         #----- Interpolate the pressure to the flattened grid
-        itpl = interp1d(rad.to_value('kpc'), p_rad.to_value('keV cm-3'),
+        itpl = interp1d(rad.to_value('kpc'), p_rad.value,
                         kind='linear', fill_value='extrapolate')
         p_grid_flat = itpl(rad_grid_flat)
 
         #----- Truncate min and max radii
-        p_grid_flat[rad_grid_flat <= self._Rmin.to_value('kpc')] = p_rmin.to_value('keV cm-3')
+        p_grid_flat[rad_grid_flat <= self._Rmin.to_value('kpc')] = p_rmin.value
         p_grid_flat[rad_grid_flat > self._R_truncation.to_value('kpc')] = 0
 
         #----- Warning
@@ -549,7 +568,87 @@ class ModelMock(object):
         #----- Reshape to the grid
         p_grid = p_grid_flat.reshape(Nz, Ny, Nx)
         
-        return p_grid*u.keV*u.cm**-3
+        return p_grid*unit
+    
+    
+    #==================================================
+    # Pressure profile to grid
+    #==================================================
+    
+    def get_pressure_cube_profile(self):
+        """
+        Fill the grid with the pressure profile.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        p_grid (ndarray quantity) : the output pressure grid with keV / cm3 unit attached
+        
+        """
+
+        return self._get_icm_cube_profile('pressure')
+
+    
+    #==================================================
+    # Density profile to grid
+    #==================================================
+    
+    def get_density_cube_profile(self):
+        """
+        Fill the grid with the density profile.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        p_grid (ndarray quantity) : the output pressure grid with cm-3 unit attached
+        
+        """
+
+        return self._get_icm_cube_profile('density')
+
+
+    #==================================================
+    # Temperature profile to grid
+    #==================================================
+    
+    def get_temperature_cube_profile(self):
+        """
+        Fill the grid with the temperature profile.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        p_grid (ndarray quantity) : the output temperature grid with keV unit attached
+        
+        """
+
+        return self._get_icm_cube_profile('temperature')
+
+
+    #==================================================
+    # Pressure profile to grid
+    #==================================================
+    
+    def get_entropy_cube_profile(self):
+        """
+        Fill the grid with the entropy profile.
+        
+        Parameters
+        ----------
+        
+        Outputs
+        ----------
+        p_grid (ndarray quantity) : the output pressure grid with keV cm2 unit attached
+        
+        """
+
+        return self._get_icm_cube_profile('entropy')
 
 
     #==================================================
@@ -613,6 +712,10 @@ class ModelMock(object):
         #----- Convert for lognormal
         if self._model_pressure_fluctuation['statistics'] == 'lognormal':
             P3d_k_grid = utils_pk.convert_pkln_to_pkgauss(P3d_k_grid, proj_reso, proj_reso, los_reso)
+        elif self._model_pressure_fluctuation['statistics'] == 'gaussian':
+            pass
+        else:
+            raise ValueError("Only gaussian or lognormal statistics implemented")
         
         #----- kill the unwanted mode: zero level and values beyond isotropic range if requested
         kmax_isosphere = self.get_kmax_isotropic().to_value('kpc-1')
@@ -635,15 +738,112 @@ class ModelMock(object):
             fluctuation_cube -= sig2/2   # So we want the mean to be -(mu + sig^2/2), with mu=0
             fluctuation_cube = np.exp(fluctuation_cube) # take exponential
             fluctuation_cube -= 1                       # Subtract 1 to have dP/P instead of dP/P+1 which is LN
+        elif self._model_pressure_fluctuation['statistics'] == 'gaussian':
+            pass
+        else:
+            raise ValueError("Only gaussian or lognormal statistics implemented")
         
         if not self.silent:
-            print('----- INFO: fluctuation cube rms.')
+            print('----- INFO: pressure fluctuation cube rms.')
             print('            Expected rms over the full k range:', self._model_pressure_fluctuation['Norm'])
             print('            Expected rms given the missing k range:', np.sqrt(np.mean(amplitude**2)))
             print('            Actual rms for this noise realization:', np.std(fluctuation_cube))
 
         return fluctuation_cube
+
+
+    #==================================================
+    # Density fluctuation to grid
+    #==================================================
+    
+    def get_density_cube_fluctuation(self,
+                                     kmin_input=None,
+                                     kmax_input=None,
+                                     force_isotropy=False,
+                                     Npt=1000):
+        """
+        Fill the grid with pressure fluctuation, i.e. delta P / P(r)
         
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - fluctuation_cube (np.ndarray): the output grid of delta n / n(r)
+        
+        """
+        
+        dP_P_cube = self.get_pressure_cube_fluctuation(kmin_input=kmin_input,
+                                                       kmax_input=kmax_input,
+                                                       force_isotropy=force_isotropy,
+                                                       Npt=Npt)
+        
+        dn_n_cube = dP_P_cube / self.model_gamma_fluctuation
+        
+        return dn_n_cube
+
+    
+    #==================================================
+    # Temperature fluctuation to grid
+    #==================================================
+    
+    def get_temperature_cube_fluctuation(self,
+                                         kmin_input=None,
+                                         kmax_input=None,
+                                         force_isotropy=False,
+                                         Npt=1000):
+        """
+        Fill the grid with temperature fluctuation, i.e. delta T / T(r)
+        
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - fluctuation_cube (np.ndarray): the output grid of delta T / T(r)
+        
+        """
+        
+        dn_n_cube = self.get_density_cube_fluctuation(kmin_input=kmin_input,
+                                                      kmax_input=kmax_input,
+                                                      force_isotropy=force_isotropy,
+                                                      Npt=Npt)
+        
+        dT_T_cube = (self.model_gamma_fluctuation - 1) * dn_n_cube
+        
+        return dT_T_cube
+    
+
+    #==================================================
+    # Entropy fluctuation to grid
+    #==================================================
+    
+    def get_entropy_cube_fluctuation(self,
+                                     kmin_input=None,
+                                     kmax_input=None,
+                                     force_isotropy=False,
+                                     Npt=1000):
+        """
+        Fill the grid with entropy fluctuation, i.e. delta K / K(r)
+        
+        Parameters
+        ----------
+
+        Outputs
+        ----------
+        - fluctuation_cube (np.ndarray): the output grid of delta K / K(r)
+        
+        """
+        
+        dn_n_cube = self.get_density_cube_fluctuation(kmin_input=kmin_input,
+                                                      kmax_input=kmax_input,
+                                                      force_isotropy=force_isotropy,
+                                                      Npt=Npt)
+        
+        dK_K_cube = (self.model_gamma_fluctuation - 5./3) * dn_n_cube
+        
+        return dK_K_cube
+    
 
     #==================================================
     # Compute SZ map
@@ -668,7 +868,7 @@ class ModelMock(object):
         the model is convolved with the beam
         - irfs_convolution_TF (dictionary): if given, the model is convolved 
         with the transfer function       
-
+        
         Outputs
         ----------
         - compton (np.ndarray) : the map in units of Compton parameter
@@ -714,6 +914,104 @@ class ModelMock(object):
                                                        apps_TF_LS=apps_TF_LS, apps_beam=apps_beam)
             
         return compton
+    
+    
+    #==================================================
+    # Compute Sx map
+    #==================================================
+    
+    def get_sx_map(self,
+                   no_fluctuations=False,
+                   new_seed=False,
+                   force_isotropy=False):
+                   
+        """
+        Compute the Sx mock image.
+        
+        Parameters
+        ----------
+        - no_fluctuations (bool): set to true when the pure spherical model is requested
+        - new_seed (bool): regenerate the seed before computing the map
+        - force_isotropy (bool): set to true to remove non isotropic k modes
+        
+        Outputs
+        ----------
+        - sx (np.ndarray) : the map in units of TBD
+        
+        """
+        
+        #----- Regenerate the seed if needed
+        if new_seed: self.new_seed()
+        
+        #----- Get n(r) and T(r) grid
+        density_profile_cube = self.get_density_cube_profile()
+        temperature_profile_cube = self.get_temperature_cube_profile()
 
+        #----- Get delta n,T(x,y,z) grid
+        if no_fluctuations:
+            density_fluctuation_cube     = density_profile_cube.value*0
+            temperature_fluctuation_cube = temperature_profile_cube.value*0
+        else:
+            density_fluctuation_cube     = self.get_density_cube_fluctuation(force_isotropy=force_isotropy)
+            temperature_fluctuation_cube = self.get_temperature_cube_fluctuation(force_isotropy=force_isotropy)
 
- 
+        #----- Go to Compton
+        n3d = density_profile_cube     * (1 + density_fluctuation_cube)
+        T3d = temperature_profile_cube * (1 + temperature_fluctuation_cube)
+        integrant = T3d**0.5 * n3d**2
+        
+        intdl = np.sum(integrant, axis=0) * self._los_reso
+        Sx = intdl.value
+        
+        return Sx
+
+    
+    #==================================================
+    # Compute Tx map
+    #==================================================
+    
+    def get_Tx_map(self,
+                   no_fluctuations=False,
+                   new_seed=False,
+                   force_isotropy=False):
+                   
+        """
+        Compute the Tx mock image.
+        
+        Parameters
+        ----------
+        - no_fluctuations (bool): set to true when the pure spherical model is requested
+        - new_seed (bool): regenerate the seed before computing the map
+        - force_isotropy (bool): set to true to remove non isotropic k modes
+        
+        Outputs
+        ----------
+        - Tx (np.ndarray) : the map in units of keV
+        
+        """
+        
+        #----- Regenerate the seed if needed
+        if new_seed: self.new_seed()
+        
+        #----- Get n(r) and T(r) grid
+        density_profile_cube     = self.get_density_cube_profile()
+        temperature_profile_cube = self.get_temperature_cube_profile()
+
+        #----- Get delta n,T(x,y,z) grid
+        if no_fluctuations:
+            density_fluctuation_cube     = density_profile_cube.value*0
+            temperature_fluctuation_cube = temperature_profile_cube.value*0
+        else:
+            density_fluctuation_cube     = self.get_density_cube_fluctuation(force_isotropy=force_isotropy)
+            temperature_fluctuation_cube = self.get_temperature_cube_fluctuation(force_isotropy=force_isotropy)
+
+        #----- Compute the mean temperature weighted by n^2
+        n3d = density_profile_cube     * (1 + density_fluctuation_cube)
+        T3d = temperature_profile_cube * (1 + temperature_fluctuation_cube)
+        integrant1 = T3d * T3d**0.5*n3d**2
+        integrant2 = T3d**0.5*n3d**2
+        
+        Tx = np.sum(integrant1, axis=0) / np.sum(integrant2, axis=0)
+        
+        return Tx.to('keV')
+

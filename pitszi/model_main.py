@@ -152,8 +152,11 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         # Initial x, y, z (l.o.s.) axes correspond to min, intermediate, maj axis
         # Euler angles 1, 2, 3 are about z axis, x axis, and z axis
         # see https://en.wikipedia.org/wiki/Euler_angles, https://arxiv.org/pdf/1702.00795.pdf
-        self._triaxiality = {'min_to_maj_axis_ratio':1, 'int_to_maj_axis_ratio':1,
-                             'euler_angle1':0*u.deg, 'euler_angle2':0*u.deg, 'euler_angle3':0*u.deg}
+        self._triaxiality = {'min_to_maj_axis_ratio':1,
+                             'int_to_maj_axis_ratio':1,
+                             'euler_angle1':0*u.deg,
+                             'euler_angle2':0*u.deg,
+                             'euler_angle3':0*u.deg}
         
         #---------- Cluster boundary
         self._R_truncation     = 3*self._R500
