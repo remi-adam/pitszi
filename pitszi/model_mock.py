@@ -45,11 +45,14 @@ class ModelMock(object):
     - get_Mgas_profile
     - get_fgas_profile
     - get_Ethermal_profile
-    - get_pressure_fluctuation_spectrum
     - get_pressure_cube_profile
     - get_density_cube_profile
     - get_temperature_cube_profile
     - get_entropy_cube_profile
+    - get_pressure_fluctuation_spectrum
+    - get_density_fluctuation_spectrum
+    - get_temperature_fluctuation_spectrum
+    - get_entropy_fluctuation_spectrum
     - get_pressure_cube_fluctuation
     - get_density_cube_fluctuation
     - get_temperature_cube_fluctuation
@@ -60,11 +63,9 @@ class ModelMock(object):
     
     To Do
     ----------
-    - get_density_fluctuation_spectrum
-    - get_temperature_fluctuation_spectrum
-
     - Include Sx normalization 
-    - Improve the central pixel definition
+    - Improve the cube central pixel definition
+    - Define the spectra and fluctuation from the density instead of pressure to avoid issue with gamma=0
 
     """
 
@@ -403,75 +404,8 @@ class ModelMock(object):
             Uth_r[i] = utils.trapz_loglog((3.0/2.0)*(mu_e/mu_gas) * 4*np.pi*rad**2 * p_r, rad)
                     
         return radius, Uth_r.to('erg')
-
     
-    #==================================================
-    # Get the electron pressure fluctuation spectrum
-    #==================================================
 
-    def get_pressure_fluctuation_spectrum(self,
-                                          kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
-                                          kmin_norm=None,
-                                          kmax_norm=None,
-                                          Npt_norm=10000):
-        """
-        Get the thermal electron pressure fluctuation spectrum (delta P / P).
-        
-        Parameters
-        ----------
-        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
-        - kmin/max_norm (quantity): the wavenumber range used for notmalization
-        - Npt_norm (int): number of point to generagte the spectrum used for normalization
-
-        Outputs
-        ----------
-        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
-        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
-
-        """
-
-        # In case the input is not an array
-        kvec = utils.check_qarray(kvec, unit='kpc-1')
-        
-        # compute the model
-        '''
-        This part could go, as for the profile, in a generic fluctuation library and be read fom there
-        This can be done when the library includes more functionnal forms
-        '''
-        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
-
-            if kmin_norm is None:
-                kmin = 1/(4*self._model_pressure_fluctuation['Linj'].to_value('kpc'))
-            else:
-                kmin = kmin_norm.to_value('kpc')
-            if kmax_norm is None:
-                kmax = 4/self._model_pressure_fluctuation['Ldis'].to_value('kpc')
-            else:
-                kmax = kmax_norm.to_value('kpc')
-
-            # K array for normalization
-            kvec_norm = np.logspace(np.log10(kmin),np.log10(kmax), Npt_norm) # kpc
-
-            # First extract the normalization givenintegrating within some k range
-            cut_low  = np.exp(-(1/(kvec_norm*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
-            cut_high = np.exp(-(kvec_norm*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
-            pl = kvec_norm**self._model_pressure_fluctuation['slope']
-            f_k = pl * cut_high * cut_low
-            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
-
-            # Then compute Pk at requested scales accounting for the normalization
-            k = kvec.to_value('kpc-1')
-            A = self._model_pressure_fluctuation['Norm']
-            cut_low  = np.exp(-(1/(k*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
-            cut_high = np.exp(-(k*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
-            pl = k**self._model_pressure_fluctuation['slope']
-            P3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
-        else:
-            raise ValueError("No other model implemented yet")
-       
-        return kvec, P3d_k*u.kpc**3
-    
-    
     #==================================================
     # Generic ICM profile to grid
     #==================================================
@@ -652,6 +586,172 @@ class ModelMock(object):
 
 
     #==================================================
+    # Get the electron pressure fluctuation spectrum
+    #==================================================
+
+    def get_pressure_fluctuation_spectrum(self,
+                                          kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
+                                          kmin_norm=None,
+                                          kmax_norm=None,
+                                          Npt_norm=10000):
+        """
+        Get the thermal electron pressure fluctuation spectrum (delta P / P).
+        
+        Parameters
+        ----------
+        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - kmin/max_norm (quantity): the wavenumber range used for notmalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
+
+        Outputs
+        ----------
+        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
+
+        """
+
+        # In case the input is not an array
+        kvec = utils.check_qarray(kvec, unit='kpc-1')
+        
+        # compute the model
+        '''
+        This part could go, as for the profile, in a generic fluctuation library and be read fom there
+        This can be done when the library includes more functionnal forms
+        '''
+        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
+
+            if kmin_norm is None:
+                kmin = 1/(4*self._model_pressure_fluctuation['Linj'].to_value('kpc'))
+            else:
+                kmin = kmin_norm.to_value('kpc')
+            if kmax_norm is None:
+                kmax = 4/self._model_pressure_fluctuation['Ldis'].to_value('kpc')
+            else:
+                kmax = kmax_norm.to_value('kpc')
+
+            # K array for normalization
+            kvec_norm = np.logspace(np.log10(kmin),np.log10(kmax), Npt_norm) # kpc
+
+            # First extract the normalization givenintegrating within some k range
+            cut_low  = np.exp(-(1/(kvec_norm*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
+            cut_high = np.exp(-(kvec_norm*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
+            pl = kvec_norm**self._model_pressure_fluctuation['slope']
+            f_k = pl * cut_high * cut_low
+            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
+
+            # Then compute Pk at requested scales accounting for the normalization
+            k = kvec.to_value('kpc-1')
+            A = self._model_pressure_fluctuation['Norm']
+            cut_low  = np.exp(-(1/(k*self._model_pressure_fluctuation['Linj'].to_value('kpc'))**2))
+            cut_high = np.exp(-(k*self._model_pressure_fluctuation['Ldis'].to_value('kpc'))**2)
+            pl = k**self._model_pressure_fluctuation['slope']
+            P3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
+        else:
+            raise ValueError("No other model implemented yet")
+       
+        return kvec, P3d_k*u.kpc**3
+
+
+    #==================================================
+    # Get the electron density fluctuation spectrum
+    #==================================================
+
+    def get_density_fluctuation_spectrum(self,
+                                          kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
+                                          kmin_norm=None,
+                                          kmax_norm=None,
+                                          Npt_norm=10000):
+        """
+        Get the thermal electron density fluctuation spectrum (delta n / n).
+        
+        Parameters
+        ----------
+        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - kmin/max_norm (quantity): the wavenumber range used for notmalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
+
+        Outputs
+        ----------
+        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
+
+        """
+
+        kvec, P3d_k = self.get_pressure_fluctuation_spectrum(kvec=kvec,
+                                                             kmin_norm=kmin_norm,
+                                                             kmax_norm=kmax_norm,
+                                                             Npt_norm=Npt_norm)
+
+        return kvec, P3d_k / self.model_gamma_fluctuation**2
+
+
+    #==================================================
+    # Get the temperature fluctuation spectrum
+    #==================================================
+
+    def get_temperature_fluctuation_spectrum(self,
+                                             kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
+                                             kmin_norm=None,
+                                             kmax_norm=None,
+                                             Npt_norm=10000):
+        """
+        Get the temperature fluctuation spectrum (delta T / T).
+        
+        Parameters
+        ----------
+        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - kmin/max_norm (quantity): the wavenumber range used for notmalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
+
+        Outputs
+        ----------
+        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
+
+        """
+
+        kvec, P3d_k = self.get_density_fluctuation_spectrum(kvec=kvec,
+                                                            kmin_norm=kmin_norm,
+                                                            kmax_norm=kmax_norm,
+                                                            Npt_norm=Npt_norm)
+
+        return kvec, P3d_k * (self.model_gamma_fluctuation - 1)**2
+
+
+    #==================================================
+    # Get the temperature fluctuation spectrum
+    #==================================================
+
+    def get_entropy_fluctuation_spectrum(self,
+                                         kvec=np.logspace(-1,2,1000)*u.Mpc**-1,
+                                         kmin_norm=None,
+                                         kmax_norm=None,
+                                         Npt_norm=10000):
+        """
+        Get the entropy fluctuation spectrum (delta K / K).
+        
+        Parameters
+        ----------
+        - kvec (quantity) : the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - kmin/max_norm (quantity): the wavenumber range used for notmalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
+
+        Outputs
+        ----------
+        - kvec (quantity): the physical wavenumber in units homogeneous to kpc-1, as a 1d array
+        - P3d_k (quantity): the 3D power spectrum in unit homogeneous to kpc^3
+
+        """
+
+        kvec, P3d_k = self.get_density_fluctuation_spectrum(kvec=kvec,
+                                                            kmin_norm=kmin_norm,
+                                                            kmax_norm=kmax_norm,
+                                                            Npt_norm=Npt_norm)
+
+        return kvec, P3d_k * (self.model_gamma_fluctuation - 5.0/3)**2
+    
+    
+    #==================================================
     # Pressure fluctuation to grid
     #==================================================
     
@@ -750,8 +850,8 @@ class ModelMock(object):
             print('            Actual rms for this noise realization:', np.std(fluctuation_cube))
 
         return fluctuation_cube
-
-
+    
+    
     #==================================================
     # Density fluctuation to grid
     #==================================================

@@ -246,7 +246,7 @@ class ModelLibrary(object):
 
         #---------- Get the model parameters
         # Ghirardini et al. 2019 (see section 3 and tab 3)
-        if polytropic_model is 'G19':
+        if polytropic_model == 'G19':
 
             E_z   = self._cosmo.efunc(self._redshift)
             h70   = self._cosmo.H0.value/70.0
@@ -326,7 +326,7 @@ class ModelLibrary(object):
 
         #---------- Get the model parameters
         # Ghirardini et al. 2019 (see section 3 and tab 3)
-        if polytropic_model is 'G19':
+        if polytropic_model == 'G19':
 
             E_z   = self._cosmo.efunc(self._redshift)
             h70   = self._cosmo.H0.value/70.0
