@@ -13,6 +13,8 @@ from scipy.interpolate import interp1d
 from minot.ClusterTools import cluster_global
 from minot.ClusterTools import cluster_profile
 
+from pitszi import utils
+
 
 #==================================================
 # Library class
@@ -42,6 +44,8 @@ class ModelLibrary(object):
     - set_density_profile_from_temperature_model
     - _validate_profile_model_parameters
     - _get_generic_profile
+    - _validate_spectrum_model_parameters
+    - _get_generic_spectrum
 
     To Do
     ----------
@@ -547,7 +551,7 @@ class ModelLibrary(object):
 
         #---------- Set the density model
         self._model_density_profile = Dpar
-
+        
         
     #==================================================
     # Validate profile model parameters
@@ -896,8 +900,164 @@ class ModelLibrary(object):
                       "profile" : prof}
             
         return outpar
+    
+    
+    #==================================================
+    # Get the generic model profile
+    #==================================================
 
+    def _get_generic_profile(self, radius, model, derivative=False):
+        """
+        Get the generic profile profile.
+        
+        Parameters
+        ----------
+        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - model (dict): dictionary containing the model parameters
+        - derivative (bool): to get the derivative of the profile
+        
+        Outputs
+        ----------
+        - prof_r (quantity): the profile
 
+        """
+
+        model_list = ['NFW', 'GNFW', 'SVM', 'beta', 'doublebeta', 'User']
+
+        if not model['name'] in model_list:
+            print('The profile model can :')
+            print(model_list)
+            raise ValueError("The requested model has not been implemented")
+
+        r3d_kpc = radius.to_value('kpc')
+
+        #---------- Case of GNFW profile
+        if model['name'] == 'NFW':
+            unit = model["rho_0"].unit
+            
+            rho0 = model["rho_0"].to_value(unit)
+            rs = model["r_s"].to_value('kpc')
+
+            if derivative:
+                prof_r = cluster_profile.NFW_model_derivative(r3d_kpc, rho0, rs) * unit*u.Unit('kpc-1')
+            else:
+                prof_r = cluster_profile.NFW_model(r3d_kpc, rho0, rs)*unit
+
+        #---------- Case of GNFW profile
+        elif model['name'] == 'GNFW':
+            unit = model["P_0"].unit
+            
+            P0 = model["P_0"].to_value(unit)
+            rp = model["r_p"].to_value('kpc')
+            a  = model["a"]
+            b  = model["b"]
+            c  = model["c"]
+
+            if derivative:
+                prof_r = cluster_profile.gNFW_model_derivative(r3d_kpc, P0, rp,
+                                                               slope_a=a,
+                                                               slope_b=b,
+                                                               slope_c=c) * unit*u.Unit('kpc-1')
+            else:
+                prof_r = cluster_profile.gNFW_model(r3d_kpc, P0, rp, slope_a=a, slope_b=b, slope_c=c)*unit
+
+        #---------- Case of SVM model
+        elif model['name'] == 'SVM':
+            unit = model["n_0"].unit
+            
+            n0      = model["n_0"].to_value(unit)
+            rc      = model["r_c"].to_value('kpc')
+            rs      = model["r_s"].to_value('kpc')
+            alpha   = model["alpha"]
+            beta    = model["beta"]
+            gamma   = model["gamma"]
+            epsilon = model["epsilon"]
+
+            if derivative:
+                prof_r = cluster_profile.svm_model_derivative(r3d_kpc, n0, rc, beta,
+                                                              rs, gamma, epsilon, alpha) * unit*u.Unit('kpc-1')
+            else:
+                prof_r = cluster_profile.svm_model(r3d_kpc, n0, rc, beta, rs, gamma, epsilon, alpha)*unit
+
+        #---------- beta model
+        elif model['name'] == 'beta':
+            unit = model["n_0"].unit
+
+            n0      = model["n_0"].to_value(unit)
+            rc      = model["r_c"].to_value('kpc')
+            beta    = model["beta"]
+
+            if derivative:
+                prof_r = cluster_profile.beta_model_derivative(r3d_kpc, n0, rc, beta) * unit*u.Unit('kpc-1')
+            else:
+                prof_r = cluster_profile.beta_model(r3d_kpc, n0, rc, beta)*unit
+            
+        #---------- double beta model
+        elif model['name'] == 'doublebeta':
+            unit1 = model["n_01"].unit
+            unit2 = model["n_02"].unit
+
+            n01      = model["n_01"].to_value(unit1)
+            rc1      = model["r_c1"].to_value('kpc')
+            beta1    = model["beta1"]
+            n02      = model["n_02"].to_value(unit2)
+            rc2      = model["r_c2"].to_value('kpc')
+            beta2    = model["beta2"]
+
+            if derivative:
+                prof_r1 = cluster_profile.beta_model_derivative(r3d_kpc, n01, rc1, beta1) * unit1*u.Unit('kpc-1')
+                prof_r2 = cluster_profile.beta_model_derivative(r3d_kpc, n02, rc2, beta2) * unit2*u.Unit('kpc-1')
+                prof_r = prof_r1 + prof_r2
+            else:
+                prof_r1 = cluster_profile.beta_model(r3d_kpc, n01, rc1, beta1)*unit1
+                prof_r2 = cluster_profile.beta_model(r3d_kpc, n02, rc2, beta2)*unit2
+                prof_r = prof_r1 + prof_r2
+
+        #---------- User model
+        elif model['name'] == 'User':
+            user_r = model["radius"].to_value('kpc')
+            user_p = model["profile"].value
+
+            # Warning
+            if np.amin(user_r) > np.amin(r3d_kpc) or np.amax(user_r) < np.amax(r3d_kpc):
+                if self._silent == False:
+                    print('WARNING: User model interpolated beyond the provided range!')
+            
+            # Case of derivative needed
+            if derivative:
+                # Compute the derivative
+                user_der = np.gradient(user_p, user_r)
+                f = interpolate.interp1d(user_r, user_der, kind='linear', fill_value='extrapolate')
+                prof_r = f(r3d_kpc)
+                
+                # Add the unit
+                prof_r = prof_r*u.Unit('kpc-1')*model["profile"].unit
+
+            # Standard case
+            else:
+                # log-log interpolation of the user profile
+                with warnings.catch_warnings(): # Warning raised in the case of log(0)
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    f = interpolate.interp1d(np.log10(user_r),
+                                             np.log10(user_p), kind='linear', fill_value='extrapolate')
+                    pitpl_r = 10**f(np.log10(r3d_kpc))
+
+                # Correct for nan (correspond to user_p == 0 in log)
+                pitpl_r[np.isnan(pitpl_r)] = 0
+                
+                # Correct for negative value
+                pitpl_r[pitpl_r<0] = 0
+
+                # Add the unit
+                prof_r = pitpl_r*model["profile"].unit
+
+        #---------- Otherwise error
+        else :
+            raise ValueError("The requested model has not been implemented")
+
+        return prof_r
+
+    
     #==================================================
     # Validate fluctuation model parameters
     #==================================================
@@ -1063,155 +1223,80 @@ class ModelLibrary(object):
     # Get the generic model profile
     #==================================================
 
-    def _get_generic_profile(self, radius, model, derivative=False):
+    def _get_generic_spectrum(self, k, model,
+                              kmin_norm=None,
+                              kmax_norm=None,
+                              Npt_norm=10000):
         """
-        Get the generic profile profile.
+        Get the generic power spectrum.
         
         Parameters
         ----------
-        - radius (quantity) : the physical 3d radius in units homogeneous to kpc, as a 1d array
+        - k (quantity) : the physical 3d wavenumber k in units homogeneous to 1/kpc, as a 1d array
         - model (dict): dictionary containing the model parameters
-        - derivative (bool): to get the derivative of the profile
-        
+        - kmin/max_norm (quantity): the wavenumber range used for normalization
+        - Npt_norm (int): number of point to generagte the spectrum used for normalization
+
         Outputs
         ----------
-        - radius (quantity): the 3d radius in unit of kpc
-        - p_r (quantity): the profile
+        - p3d_k (quantity): the power spectrum
 
         """
 
-        model_list = ['NFW', 'GNFW', 'SVM', 'beta', 'doublebeta', 'User']
+        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'User']
 
         if not model['name'] in model_list:
-            print('The profile model can :')
+            print('The power spectrum model can :')
             print(model_list)
             raise ValueError("The requested model has not been implemented")
 
-        r3d_kpc = radius.to_value('kpc')
+        k3d_kpc = k.to_value('kpc-1')
 
-        #---------- Case of GNFW profile
-        if model['name'] == 'NFW':
-            unit = model["rho_0"].unit
+        #---------- Case of CutoffPowerLaw spectrum
+        if model['name'] == 'CutoffPowerLaw':
+            # Extract params
+            A     = model["Norm"]
+            slope = model['slope']
+            Ldis  = model['Ldis'].to_value('kpc')
+            Linj  = model['Linj'].to_value('kpc')
+
+            # Define kmin and kmax
+            if kmin_norm is None:
+                kmin = 1/(4*Linj)
+            else:
+                kmin = kmin_norm.to_value('kpc')
+            if kmax_norm is None:
+                kmax = 4/Ldis
+            else:
+                kmax = kmax_norm.to_value('kpc')
             
-            rho0 = model["rho_0"].to_value(unit)
-            rs = model["r_s"].to_value('kpc')
+            # k array for normalization
+            kvec_norm = np.logspace(np.log10(kmin), np.log10(kmax), Npt_norm) # 1/kpc
 
-            if derivative:
-                prof_r = cluster_profile.NFW_model_derivative(r3d_kpc, rho0, rs) * unit*u.Unit('kpc-1')
-            else:
-                prof_r = cluster_profile.NFW_model(r3d_kpc, rho0, rs)*unit
+            # First extract the normalization given integrating within some k range
+            cut_low  = np.exp(-(1/(kvec_norm * Linj)**2))
+            cut_high = np.exp(-(kvec_norm * Ldis)**2)
+            f_k      = kvec_norm**slope * cut_high * cut_low
+            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
 
-        #---------- Case of GNFW profile
-        elif model['name'] == 'GNFW':
-            unit = model["P_0"].unit
+            # Then compute Pk at requested scales accounting for the normalization
+            cut_low  = np.exp(-(1/(k3d_kpc * Linj)**2))
+            cut_high = np.exp(-(k3d_kpc * Ldis)**2)
+            pl       = k3d_kpc**slope
+            p3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
             
-            P0 = model["P_0"].to_value(unit)
-            rp = model["r_p"].to_value('kpc')
-            a  = model["a"]
-            b  = model["b"]
-            c  = model["c"]
+        #---------- Case of CutoffPowerLaw spectrum
+        elif model['name'] == 'ModifiedCutoffPowerLaw':
 
-            if derivative:
-                prof_r = cluster_profile.gNFW_model_derivative(r3d_kpc, P0, rp,
-                                                               slope_a=a,
-                                                               slope_b=b,
-                                                               slope_c=c) * unit*u.Unit('kpc-1')
-            else:
-                prof_r = cluster_profile.gNFW_model(r3d_kpc, P0, rp, slope_a=a, slope_b=b, slope_c=c)*unit
+            print('To do')
 
-        #---------- Case of SVM model
-        elif model['name'] == 'SVM':
-            unit = model["n_0"].unit
-            
-            n0      = model["n_0"].to_value(unit)
-            rc      = model["r_c"].to_value('kpc')
-            rs      = model["r_s"].to_value('kpc')
-            alpha   = model["alpha"]
-            beta    = model["beta"]
-            gamma   = model["gamma"]
-            epsilon = model["epsilon"]
-
-            if derivative:
-                prof_r = cluster_profile.svm_model_derivative(r3d_kpc, n0, rc, beta,
-                                                              rs, gamma, epsilon, alpha) * unit*u.Unit('kpc-1')
-            else:
-                prof_r = cluster_profile.svm_model(r3d_kpc, n0, rc, beta, rs, gamma, epsilon, alpha)*unit
-
-        #---------- beta model
-        elif model['name'] == 'beta':
-            unit = model["n_0"].unit
-
-            n0      = model["n_0"].to_value(unit)
-            rc      = model["r_c"].to_value('kpc')
-            beta    = model["beta"]
-
-            if derivative:
-                prof_r = cluster_profile.beta_model_derivative(r3d_kpc, n0, rc, beta) * unit*u.Unit('kpc-1')
-            else:
-                prof_r = cluster_profile.beta_model(r3d_kpc, n0, rc, beta)*unit
-            
-        #---------- double beta model
-        elif model['name'] == 'doublebeta':
-            unit1 = model["n_01"].unit
-            unit2 = model["n_02"].unit
-
-            n01      = model["n_01"].to_value(unit1)
-            rc1      = model["r_c1"].to_value('kpc')
-            beta1    = model["beta1"]
-            n02      = model["n_02"].to_value(unit2)
-            rc2      = model["r_c2"].to_value('kpc')
-            beta2    = model["beta2"]
-
-            if derivative:
-                prof_r1 = cluster_profile.beta_model_derivative(r3d_kpc, n01, rc1, beta1) * unit1*u.Unit('kpc-1')
-                prof_r2 = cluster_profile.beta_model_derivative(r3d_kpc, n02, rc2, beta2) * unit2*u.Unit('kpc-1')
-                prof_r = prof_r1 + prof_r2
-            else:
-                prof_r1 = cluster_profile.beta_model(r3d_kpc, n01, rc1, beta1)*unit1
-                prof_r2 = cluster_profile.beta_model(r3d_kpc, n02, rc2, beta2)*unit2
-                prof_r = prof_r1 + prof_r2
-
-        #---------- User model
+        #---------- Case of User spectrum
         elif model['name'] == 'User':
-            user_r = model["radius"].to_value('kpc')
-            user_p = model["profile"].value
 
-            # Warning
-            if np.amin(user_r) > np.amin(r3d_kpc) or np.amax(user_r) < np.amax(r3d_kpc):
-                if self._silent == False:
-                    print('WARNING: User model interpolated beyond the provided range!')
+            print('To do')
             
-            # Case of derivative needed
-            if derivative:
-                # Compute the derivative
-                user_der = np.gradient(user_p, user_r)
-                f = interpolate.interp1d(user_r, user_der, kind='linear', fill_value='extrapolate')
-                prof_r = f(r3d_kpc)
-                
-                # Add the unit
-                prof_r = prof_r*u.Unit('kpc-1')*model["profile"].unit
-
-            # Standard case
-            else:
-                # log-log interpolation of the user profile
-                with warnings.catch_warnings(): # Warning raised in the case of log(0)
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    f = interpolate.interp1d(np.log10(user_r),
-                                             np.log10(user_p), kind='linear', fill_value='extrapolate')
-                    pitpl_r = 10**f(np.log10(r3d_kpc))
-
-                # Correct for nan (correspond to user_p == 0 in log)
-                pitpl_r[np.isnan(pitpl_r)] = 0
-                
-                # Correct for negative value
-                pitpl_r[pitpl_r<0] = 0
-
-                # Add the unit
-                prof_r = pitpl_r*model["profile"].unit
-
-        #---------- Otherwise nothing is done
+        #---------- Otherwise error
         else :
-            if not self._silent: print('The requested model has not been implemented.')
+            raise ValueError("The requested model has not been implemented")
 
-        return prof_r
-
+        return p3d_k*u.kpc**3
