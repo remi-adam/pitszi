@@ -918,7 +918,7 @@ class ModelLibrary(object):
         """
 
         # List of available authorized models
-        model_list = ['CutoffPowerLaw']
+        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'User']
         stats_list = ['gaussian', 'lognormal']
         
         # Check that the input is a dictionary
@@ -982,6 +982,79 @@ class ModelLibrary(object):
                       "slope": inpar['slope'],
                       "Linj" : inpar['Linj'].to('kpc'),
                       "Ldis" : inpar['Ldis'].to('kpc')}
+
+        #---------- Deal with the case of ModifiedCutoffPowerLaw (Eq 4 in C. Romero 2024)
+        if inpar['name'] == 'ModifiedCutoffPowerLaw':
+            # Check the content of the dictionary
+            cond1 = 'Norm' in list(inpar.keys()) and 'slope' in list(inpar.keys())
+            cond2 = 'Linj' in list(inpar.keys()) and 'Ldis' in list(inpar.keys())
+            cond3 = 'Ninj' in list(inpar.keys()) and 'Ndis' in list(inpar.keys())
+            if not (cond1 and cond2 and cond3):
+                raise ValueError("The ModifiedCutoffPowerLaw model should contain: {'Norm','slope','Linj','Ldis','Ninj','Ndis'}.")
+
+            # Check units
+            try:
+                test = inpar['Linj'].to('kpc')
+            except:
+                raise TypeError("Linj should be homogeneous to kpc")
+            try:
+                test = inpar['Ldis'].to('kpc')
+            except:
+                raise TypeError("Ldis should be homogeneous to kpc")
+            if type(inpar['Norm']) == u.quantity.Quantity:
+                raise TypeError("Norm is the rms of the relative fluctuation, should be dimenssionless")
+            if type(inpar['slope']) == u.quantity.Quantity:
+                raise TypeError("slope should be dimenssionless")
+            if type(inpar['Ndis']) == u.quantity.Quantity:
+                raise TypeError("Ndis should be dimenssionless")
+            if type(inpar['Ninj']) == u.quantity.Quantity:
+                raise TypeError("Ndis should be dimenssionless")
+            
+            # Check values
+            if inpar['Norm'] < 0:
+                raise ValueError("Norm should be >= 0")
+            if inpar['Linj'] < 0:
+                raise ValueError("Linj should be >= 0")
+            if inpar['Ldis'] < 0:
+                raise ValueError("Ldis should be >= 0")
+
+            # All good at this stage, setting parameters
+            outpar = {"name" : 'ModifiedCutoffPowerLaw',
+                      "statistics": inpar['statistics'],
+                      "Norm" : inpar['Norm'],
+                      "slope": inpar['slope'],
+                      "Linj" : inpar['Linj'].to('kpc'),
+                      "Ldis" : inpar['Ldis'].to('kpc'),
+                      "Ninj": inpar['Ninj'],
+                      "Ndis": inpar['Ndis']}
+
+        #---------- Deal with the case of User
+        if inpar['name'] == 'User':
+            # Check the content of the dictionary
+            cond1 = 'k' in list(inpar.keys()) and 'pk' in list(inpar.keys())
+            if not cond1:
+                raise ValueError("The User model should contain: {'k','pk'}.")
+
+            # Check units
+            try:
+                test = inpar['k'].to('kpc-1')
+            except:
+                raise TypeError("k should be homogeneous to 1/kpc")
+            try:
+                test = inpar['pk'].to('kpc3')
+            except:
+                raise TypeError("pk should be homogeneous to kpc^3")
+
+            # Check values
+            if np.amin(inpar['k']) < 0:
+                raise ValueError("k should be >= 0")
+            if np.amin(inpar['pk']) < 0:
+                raise ValueError("pk should be larger >= 0")
+
+            # All good at this stage, setting parameters
+            outpar = {"name"   : 'User',
+                      "radius" : inpar['k'].to('kpc-1'),
+                      "pk"     : inpar['pk'].to('kpc3')}
 
         return outpar
 

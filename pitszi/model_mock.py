@@ -1076,7 +1076,7 @@ class ModelMock(object):
                    force_isotropy=False):
                    
         """
-        Compute the Tx mock image.
+        Compute the Tx mock image, as temperature weighted by n^2 T^1/2.
         
         Parameters
         ----------
