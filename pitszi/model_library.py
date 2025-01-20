@@ -1260,13 +1260,13 @@ class ModelLibrary(object):
             Ldis  = model['Ldis'].to_value('kpc')
             Linj  = model['Linj'].to_value('kpc')
 
-            # Define kmin and kmax
+            # Define kmin and kmax (when cutoff reduces the ampli by 10^7)
             if kmin_norm is None:
-                kmin = 1/(4*Linj)
+                kmin = 1/(Linj*(-np.log(1e-7))**(1/2))
             else:
                 kmin = kmin_norm.to_value('kpc')
             if kmax_norm is None:
-                kmax = 4/Ldis
+                kmax = (-np.log(1e-7))**(1/2)/Ldis
             else:
                 kmax = kmax_norm.to_value('kpc')
             
@@ -1287,9 +1287,39 @@ class ModelLibrary(object):
             
         #---------- Case of CutoffPowerLaw spectrum
         elif model['name'] == 'ModifiedCutoffPowerLaw':
+            # Extract params
+            A     = model["Norm"]
+            slope = model['slope']
+            Ldis  = model['Ldis'].to_value('kpc')
+            Linj  = model['Linj'].to_value('kpc')
+            Ndis  = model['Ndis']
+            Ninj  = model['Ninj']
+            
+            # Define kmin and kmax (when cutoff reduces the ampli by 10^7)
+            if kmin_norm is None:
+                kmin = 1/(Linj * (-np.log(1e-7))**(1/Ninj))
+            else:
+                kmin = kmin_norm.to_value('kpc')
+            if kmax_norm is None:
+                kmax = (-np.log(1e-7))**(1/Ndis)/Ldis 
+            else:
+                kmax = kmax_norm.to_value('kpc')
+            
+            # k array for normalization
+            kvec_norm = np.logspace(np.log10(kmin), np.log10(kmax), Npt_norm) # 1/kpc
 
-            print('To do')
+            # First extract the normalization given integrating within some k range
+            cut_low  = np.exp(-(1/(kvec_norm * Linj)**Ninj))
+            cut_high = np.exp(-(kvec_norm * Ldis)**Ndis)
+            f_k      = kvec_norm**slope * cut_high * cut_low
+            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
 
+            # Then compute Pk at requested scales accounting for the normalization
+            cut_low  = np.exp(-(1/(k3d_kpc * Linj)**Ninj))
+            cut_high = np.exp(-(k3d_kpc * Ldis)**Ndis)
+            pl       = k3d_kpc**slope
+            p3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
+                        
         #---------- Case of User spectrum
         elif model['name'] == 'User':
 
