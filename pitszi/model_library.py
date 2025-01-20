@@ -5,7 +5,6 @@ This file deals with the model parametrization
 
 import astropy.units as u
 import numpy as np
-from scipy import interpolate
 import warnings
 from astropy import constants as const
 from scipy.interpolate import interp1d
@@ -1027,7 +1026,7 @@ class ModelLibrary(object):
             if derivative:
                 # Compute the derivative
                 user_der = np.gradient(user_p, user_r)
-                f = interpolate.interp1d(user_r, user_der, kind='linear', fill_value='extrapolate')
+                f = interp1d(user_r, user_der, kind='linear', fill_value='extrapolate')
                 prof_r = f(r3d_kpc)
                 
                 # Add the unit
@@ -1038,8 +1037,7 @@ class ModelLibrary(object):
                 # log-log interpolation of the user profile
                 with warnings.catch_warnings(): # Warning raised in the case of log(0)
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    f = interpolate.interp1d(np.log10(user_r),
-                                             np.log10(user_p), kind='linear', fill_value='extrapolate')
+                    f = interp1d(np.log10(user_r), np.log10(user_p), kind='linear', fill_value='extrapolate')
                     pitpl_r = 10**f(np.log10(r3d_kpc))
 
                 # Correct for nan (correspond to user_p == 0 in log)
@@ -1212,9 +1210,10 @@ class ModelLibrary(object):
                 raise ValueError("pk should be larger >= 0")
 
             # All good at this stage, setting parameters
-            outpar = {"name"   : 'User',
-                      "radius" : inpar['k'].to('kpc-1'),
-                      "pk"     : inpar['pk'].to('kpc3')}
+            outpar = {"name" : 'User',
+                      "statistics": inpar['statistics'],
+                      "k"    : inpar['k'].to('kpc-1'),
+                      "pk"   : inpar['pk'].to('kpc3')}
 
         return outpar
 
@@ -1322,8 +1321,26 @@ class ModelLibrary(object):
                         
         #---------- Case of User spectrum
         elif model['name'] == 'User':
+            
+            user_k  = model["k"].to_value('kpc-1')
+            user_pk = model["pk"].to_value('kpc3')
 
-            print('To do')
+            # Warning
+            if np.amin(user_k) > np.amin(k3d_kpc) or np.amax(user_k) < np.amax(k3d_kpc):
+                if self._silent == False:
+                    print('WARNING: User model interpolated beyond the provided range!')
+            
+            # log-log interpolation of the user profile
+            with warnings.catch_warnings(): # Warning raised in the case of log(0)
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                f = interp1d(np.log10(user_k), np.log10(user_pk), kind='quadratic', fill_value='extrapolate')
+                p3d_k = 10**f(np.log10(k3d_kpc))
+
+            # Correct for nan (correspond to user_p == 0 in log)
+            p3d_k[np.isnan(p3d_k)] = 0
+            
+            # Correct for negative value
+            p3d_k[p3d_k<0] = 0
             
         #---------- Otherwise error
         else :

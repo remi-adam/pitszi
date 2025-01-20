@@ -746,18 +746,20 @@ class ModelMock(object):
         - fluctuation_cube (np.ndarray) : the output grid of delta P / P(r)
         
         """
-        
+
+        #----- Model list for which norm is a parameter
+        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw']
+                
         #----- Set a seed
         np.random.seed(self._model_seed_fluctuation)
 
         #----- Get the grid properties
         Nx, Ny, Nz, proj_reso, proj_reso, los_reso = self.get_3dgrid()
 
-        #----- Bypass if no fluctuations
-        if self._model_pressure_fluctuation['name'] == 'CutoffPowerLaw':
+        #----- Bypass if no fluctuations for some models
+        if self._model_pressure_fluctuation['name'] in model_list:
             if self._model_pressure_fluctuation['Norm'] == 0:
-                fluctuation_cube = np.zeros((Nz, Ny, Nx))
-                return fluctuation_cube
+                return np.zeros((Nz, Ny, Nx))
 
         #----- Get the k arrays along each axis
         k_x = np.fft.fftfreq(Nx, proj_reso) # 1/kpc
@@ -815,7 +817,8 @@ class ModelMock(object):
         
         if not self.silent:
             print('----- INFO: pressure fluctuation cube rms.')
-            print('            Expected rms over the full k range:', self._model_pressure_fluctuation['Norm'])
+            if self._model_pressure_fluctuation['name'] in model_list:
+                print('            Expected rms over the full k range:', self._model_pressure_fluctuation['Norm'])
             print('            Expected rms given the missing k range:', np.sqrt(np.mean(amplitude**2)))
             print('            Actual rms for this noise realization:', np.std(fluctuation_cube))
 
