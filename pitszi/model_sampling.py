@@ -166,7 +166,7 @@ class ModelSampling(object):
         Nx = header['NAXIS1']
         Ny = header['NAXIS2']
         center_pix = tuple((np.array([Nx, Ny]) - 1.0) / 2)[::-1]
-        map_center = SkyCoord.from_pixel(center_pix[0], center_pix[1], WCS(header))
+        map_center = SkyCoord.from_pixel(center_pix[1], center_pix[0], WCS(header))
         
         return map_center        
 
