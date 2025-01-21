@@ -208,7 +208,7 @@ class InferenceFluctuationFitting(object):
             
         Parameters
         ----------
-        - parinfo_fluct (dict): see parinfo_fluct in get_pk3d_model_forward_fitting
+        - parinfo (dict): see parinfo in run_curvefit_fluctuation
     
         Outputs
         ----------
@@ -234,38 +234,68 @@ class InferenceFluctuationFitting(object):
         parinfo_fluct = copy.deepcopy(parinfo)
         if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
         if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
-        
-        # Loop over the keys
-        Npar_fluct = len(list(parinfo_fluct.keys()))
-        for ipar in range(Npar_fluct):
-            
-            parkey = list(parinfo_fluct.keys())[ipar]
 
+        # Special case of the User model
+        if 'User' in parkeys:
             #----- Check that parameters are working
-            try:
-                bid = self.model.model_pressure_fluctuation[parkey]
-            except:
-                raise ValueError('The parameter '+parkey+' is not in self.model.model_pressure_fluctuation')    
-            
-            if 'guess' not in parinfo_fluct[parkey]:
+            if 'guess' not in parinfo_fluct['User']:
                 raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')
-            if 'unit' not in parinfo_fluct[parkey]:
+            if 'unit' not in parinfo_fluct['User']:
                 raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
+
+            Npar_fluct = len(parinfo_fluct['User']['guess'][0])            
+            if Npar_fluct != len(self.model.model_pressure_fluctuation['k']):
+                raise ValueError('The "User" model requiere the same number of parameters than k bins defined')
+
+            for ipar in range(Npar_fluct):
+                    
+                #----- Update the name list
+                par_list.append('Pk_bin_'+str(ipar))
+        
+                #----- Update the guess values
+                par0_value.append(parinfo_fluct['User']['guess'][0][ipar])
+                par0_err.append(parinfo_fluct['User']['guess'][1][ipar])
+        
+                #----- Update the limit values
+                if 'limit' in parinfo_fluct['User']:
+                    par_min.append(parinfo_fluct['User']['limit'][0][ipar])
+                    par_max.append(parinfo_fluct['User']['limit'][1][ipar])
+                else:
+                    par_min.append(-np.inf)
+                    par_max.append(+np.inf)
+                    
+        else:
+        # Loop over the keys
+            Npar_fluct = len(list(parinfo_fluct.keys()))
+            for ipar in range(Npar_fluct):
+                
+                parkey = list(parinfo_fluct.keys())[ipar]
     
-            #----- Update the name list
-            par_list.append(parkey)
-    
-            #----- Update the guess values
-            par0_value.append(parinfo_fluct[parkey]['guess'][0])
-            par0_err.append(parinfo_fluct[parkey]['guess'][1])
-    
-            #----- Update the limit values
-            if 'limit' in parinfo_fluct[parkey]:
-                par_min.append(parinfo_fluct[parkey]['limit'][0])
-                par_max.append(parinfo_fluct[parkey]['limit'][1])
-            else:
-                par_min.append(-np.inf)
-                par_max.append(+np.inf)
+                #----- Check that parameters are working
+                try:
+                    bid = self.model.model_pressure_fluctuation[parkey]
+                except:
+                    raise ValueError('The parameter '+parkey+' is not in self.model.model_pressure_fluctuation')    
+                
+                if 'guess' not in parinfo_fluct[parkey]:
+                    raise ValueError('The guess key is mandatory for starting the chains, as "guess":[guess_value, guess_uncertainty] ')
+                if 'unit' not in parinfo_fluct[parkey]:
+                    raise ValueError('The unit key is mandatory. Use "unit":None if unitless')
+        
+                #----- Update the name list
+                par_list.append(parkey)
+        
+                #----- Update the guess values
+                par0_value.append(parinfo_fluct[parkey]['guess'][0])
+                par0_err.append(parinfo_fluct[parkey]['guess'][1])
+        
+                #----- Update the limit values
+                if 'limit' in parinfo_fluct[parkey]:
+                    par_min.append(parinfo_fluct[parkey]['limit'][0])
+                    par_max.append(parinfo_fluct[parkey]['limit'][1])
+                else:
+                    par_min.append(-np.inf)
+                    par_max.append(+np.inf)
 
         #========== Noise ampli
         list_nuisance_allowed = ['Anoise', 'Abkg']
@@ -340,27 +370,49 @@ class InferenceFluctuationFitting(object):
         if 'Anoise' in parkeys: parinfo_fluct.pop('Anoise')
         if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
 
-        # Loop over the keys
-        parkeys_fluct = list(parinfo_fluct.keys())
-
-        for ipar in range(len(parkeys_fluct)):
-            parkey = parkeys_fluct[ipar]
-        
-            # Flat prior
-            if 'limit' in parinfo_fluct[parkey]:
-                if param[idx_par] < parinfo_fluct[parkey]['limit'][0]:
-                    return -np.inf                
-                if param[idx_par] > parinfo_fluct[parkey]['limit'][1]:
-                    return -np.inf
+        # Special case of 'User' model
+        if 'User' in parkeys:
+            Npar_fluct = len(parinfo_fluct['User']['guess'][0])            
+            for ipar in range(Npar_fluct):
                 
-            # Gaussian prior
-            if 'prior' in parinfo_fluct[parkey]:
-                expected = parinfo_fluct[parkey]['prior'][0]
-                sigma = parinfo_fluct[parkey]['prior'][1]
-                prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
+                # Flat prior
+                if 'limit' in parinfo_fluct['User']:
+                    if param[idx_par] < parinfo_fluct['User']['limit'][0][ipar]:
+                        return -np.inf                
+                    if param[idx_par] > parinfo_fluct['User']['limit'][1][ipar]:
+                        return -np.inf
+                    
+                # Gaussian prior
+                if 'prior' in parinfo_fluct['User']:
+                    expected = parinfo_fluct['User']['prior'][0][ipar]
+                    sigma = parinfo_fluct['User']['prior'][1][ipar]
+                    prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
     
-            # Increase param index
-            idx_par += 1
+                # Increase param index
+                idx_par += 1
+
+        else:
+        # Loop over the keys
+            parkeys_fluct = list(parinfo_fluct.keys())
+            
+            for ipar in range(len(parkeys_fluct)):
+                parkey = parkeys_fluct[ipar]
+            
+                # Flat prior
+                if 'limit' in parinfo_fluct[parkey]:
+                    if param[idx_par] < parinfo_fluct[parkey]['limit'][0]:
+                        return -np.inf                
+                    if param[idx_par] > parinfo_fluct[parkey]['limit'][1]:
+                        return -np.inf
+                    
+                # Gaussian prior
+                if 'prior' in parinfo_fluct[parkey]:
+                    expected = parinfo_fluct[parkey]['prior'][0]
+                    sigma = parinfo_fluct[parkey]['prior'][1]
+                    prior += -0.5*(param[idx_par] - expected)**2 / sigma**2
+            
+                # Increase param index
+                idx_par += 1
 
         #========== Other parameters
         list_allowed  = ['Anoise', 'Abkg']
@@ -426,15 +478,30 @@ class InferenceFluctuationFitting(object):
         if 'Abkg'   in parkeys: parinfo_fluct.pop('Abkg')
         parkeys_fluct = list(parinfo_fluct.keys())
 
-        # Loop Fluctuation
-        for ipar in range(len(parkeys_fluct)):
-            parkey = parkeys_fluct[ipar]
-            if parinfo_fluct[parkey]['unit'] is not None:
-                unit = parinfo_fluct[parkey]['unit']
+        # Special case of the User model
+        if 'User' in parkeys_fluct:
+            pkvec = []
+            Nbin = len(parinfo_fluct['User']['guess'][0])
+            for ipar in range(Nbin):
+                pkvec.append(param[idx_par])
+                idx_par += 1
+
+            if parinfo_fluct['User']['unit'] is not None:
+                unit = parinfo_fluct['User']['unit']
             else:
-                unit = 1
-            self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
-            idx_par += 1
+                    unit = 1                
+            self.model.model_pressure_fluctuation['pk'] = np.array(pkvec) * unit
+
+        else:
+        # Loop Fluctuation
+            for ipar in range(len(parkeys_fluct)):
+                parkey = parkeys_fluct[ipar]
+                if parinfo_fluct[parkey]['unit'] is not None:
+                    unit = parinfo_fluct[parkey]['unit']
+                else:
+                    unit = 1
+                self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
+                idx_par += 1
 
         #========== Noise and background amplitude
         if 'Anoise' in parkeys:
@@ -530,7 +597,9 @@ class InferenceFluctuationFitting(object):
                              include_model_error=False,
                              filename_sampler=None,
                              show_fit_result=False,
-                             set_bestfit=False):
+                             set_bestfit=False,
+                             true_pk3d=None,
+                             true_param=None):
         """
         This function fits the 3d power spectrum
         using a forward modeling approach via deprojection
@@ -563,6 +632,9 @@ class InferenceFluctuationFitting(object):
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): set to true to produce plots for fitting results
         - set_bestfit (bool): set the best fit to the model
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        - true_param (list): the list of expected parameter value for the fit
         
         Outputs
         ----------
@@ -654,8 +726,12 @@ class InferenceFluctuationFitting(object):
         
         #========== Show results
         if show_fit_result:
-            self.get_mcmc_chains_outputs_results(par_list, sampler, extname='_Fluctuation_'+kind)
-            self.run_mcmc_fluctuation_results(sampler, parinfo, extname='_'+kind)
+            self.get_mcmc_chains_outputs_results(par_list, sampler,
+                                                 truth=true_param,
+                                                 extname='_Fluctuation_'+kind)
+            self.run_mcmc_fluctuation_results(sampler, parinfo,
+                                              true_pk3d=true_pk3d,
+                                              extname='_'+kind)
 
         #========== Compute the best-fit model and set it
         if set_bestfit:
@@ -793,7 +869,10 @@ class InferenceFluctuationFitting(object):
                                  kind='projection',
                                  include_model_error=False,
                                  show_fit_result=False,
-                                 set_bestfit=False):
+                                 set_bestfit=False,
+                                 true_pk3d=None,
+                                 true_param=None):
+
         """
         This function fits the 3d power spectrum
         using a forward modeling approach via deprojection using curvefit
@@ -817,6 +896,14 @@ class InferenceFluctuationFitting(object):
                           'unit': u.Mpc, 
                         },
                        }  
+        In the special case of the 'User' model, the format is as follows, where pk_arra_xxx are arrays
+        parinfo      = {'User':                            # --> Parameter key (mandatory)
+                        {'guess':[pk_arr, pk_arr_err],     # --> initial guess: center, uncertainty (mandatory)
+                         'unit': pk_arr.unit,              # --> unit (mandatory, None if unitless)
+                         'limit':[pk_arr_low, pk_arr_sup], # --> Allowed range, i.e. flat prior (optional)
+                         'prior':[pk_arr_mu, pk_arr_sig],  # --> Gaussian prior: mean, sigma (optional)
+                        },
+                       }  
         Other accepted parameters: 'Anoise'
 
         - kind (str): projection or brute, for using 
@@ -825,6 +912,9 @@ class InferenceFluctuationFitting(object):
         assuming the reference model
         - show_fit_result (bool): set to true to produce plots for fitting results
         - set_bestfit (bool): set the best fit to the model
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        - true_param (list): the list of expected parameter value for the fit
 
         Outputs
         ----------
@@ -883,8 +973,10 @@ class InferenceFluctuationFitting(object):
 
         #========== Show results
         if show_fit_result:
-            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov, extname='_Fluctuation')
-            self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo)
+            self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov,
+                                              truth=true_param, extname='_Fluctuation')
+            self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo,
+                                                  true_pk3d=true_pk3d)
         
         #========== Compute the best-fit model and set it
         if set_bestfit:

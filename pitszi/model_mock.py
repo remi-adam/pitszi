@@ -63,8 +63,8 @@ class ModelMock(object):
     
     To Do
     ----------
-    - Include Sx normalization 
     - Improve the cube central pixel definition
+    - Include Sx normalization 
     - Define the spectra and fluctuation from the density instead of pressure to avoid issue with gamma=0
 
     """

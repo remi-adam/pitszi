@@ -472,6 +472,14 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         #---------- Info
         if not self.silent:
             print('----- Running the setup -----')
+            print('The setup is necessary for inference on the power spectrum:')
+            print('- Compute map resolution and k binning information         ')
+            print('- compute ymap residual to be used for Pk extraction       ')
+            print('- compute the smooth model                                 ')
+            print('- extract Pk data, reference model and noise properties    ')
+            print('- compute conversion from Pk 2d to Pk3d                    ')
+            print('- compute the mode mixing matrix given the weights         ') 
+            
             if self._pk_setup_done :
                 print('      - The Pk setup was already done, but it will be overwritten.')
 
