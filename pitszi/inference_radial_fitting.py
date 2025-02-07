@@ -167,7 +167,15 @@ class InferenceRadialFitting(object):
                 isamp += 1
             else:
                 ibad += 1
+            # Security in case issu in multivariate sampling
             if ibad == Nsample:
+                file = open(self.output_dir+'/CurveFit'+extraname+'_statistics.txt','w')
+                for ipar in range(Nparam):
+                    file.write('param '+str(ipar)+' ('+parlist[ipar]+'): '+'\n')
+                    bfval = str(popt[ipar])+' +-'+str(pcov[ipar,ipar]**0.5)
+                    file.write('  best   = '+bfval+'\n')
+                file.close() 
+                
                 if not self.silent:
                     print('WARNING: Cannot produce chains from multivariate sampling.')
                     print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
