@@ -898,7 +898,8 @@ class InferenceRadialFitting(object):
     
     def run_curvefit_profile(self, parinfo,
                              show_fit_result=False,
-                             set_bestfit=False):
+                             set_bestfit=False,
+                             maxfev=10000):
         """
         This function fits the data given the current model and the parameter information
         given by the user, using curvefit.
@@ -926,6 +927,8 @@ class InferenceRadialFitting(object):
         model.set_pressure_profile_universal_param : 'M500':{'guess':..., 'P_ref': 'A10UPP'}
 
         - show_fit_result (bool): show the best fit model and residual.
+        - set_bestfit (bool): the the current model to the best-fit
+        - maxfev (int): maxfev argument to pass to curvefit
 
         Outputs
         ----------
@@ -967,7 +970,8 @@ class InferenceRadialFitting(object):
                                      p0=par0_value,
                                      sigma=sigma,
                                      absolute_sigma=True,
-                                     bounds=(par_min, par_max))
+                                     bounds=(par_min, par_max),
+                                     maxfev=maxfev)
 
         #========== Show results
         if show_fit_result:
