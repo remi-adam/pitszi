@@ -155,6 +155,13 @@ class InferenceRadialFitting(object):
             if len(truth) != Nparam:
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
+        #---------- Output best fit and errors
+        file = open(self.output_dir+'/CurveFit'+extraname+'_main_result.txt','w')
+        for ipar in range(Nparam):
+            bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
+            file.write('param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval+'\n')
+        file.close() 
+            
         #---------- Mimic MCMC chains with multivariate Gaussian
         par_chains = np.zeros((Nsample, Nparam))
         isamp = 0
@@ -168,14 +175,7 @@ class InferenceRadialFitting(object):
             else:
                 ibad += 1
             # Security in case issu in multivariate sampling
-            if ibad == Nsample:
-                file = open(self.output_dir+'/CurveFit'+extraname+'_statistics.txt','w')
-                for ipar in range(Nparam):
-                    file.write('param '+str(ipar)+' ('+parlist[ipar]+'): '+'\n')
-                    bfval = str(popt[ipar])+' +-'+str(pcov[ipar,ipar]**0.5)
-                    file.write('  best   = '+bfval+'\n')
-                file.close() 
-                
+            if ibad == Nsample:                
                 if not self.silent:
                     print('WARNING: Cannot produce chains from multivariate sampling.')
                     print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
@@ -1112,7 +1112,6 @@ class InferenceRadialFitting(object):
                     print('         Continue without uncertainties.')
                 for isa in range(self.mcmc_Nresamp): MC_pars[isa,:] = popt
                 isamp = self.mcmc_Nresamp
-                
                 
         for i in range(self.mcmc_Nresamp):
             # Get MC model

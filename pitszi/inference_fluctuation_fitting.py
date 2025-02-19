@@ -152,16 +152,34 @@ class InferenceFluctuationFitting(object):
             if len(truth) != Nparam:
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
+        #---------- Output best fit and errors
+        file = open(self.output_dir+'/CurveFit'+extname+'_main_result.txt','w')
+        for ipar in range(Nparam):
+            bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
+            file.write('param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval+'\n')
+        file.close() 
+        
         #---------- Mimic MCMC chains with multivariate Gaussian
         par_chains = np.zeros((Nsample, Nparam))
         isamp = 0
+        ibad = 0
         while isamp < Nsample:
             param = np.random.multivariate_normal(popt, pcov)
             cond = np.isfinite(self.prior_fluctuation(param, parinfo)) # make sure params are within limits
             if cond:
                 par_chains[isamp,:] = param
                 isamp += 1
-        
+            else:
+                ibad += 1
+            # Security in case issu in multivariate sampling
+            if ibad == Nsample:
+                if not self.silent:
+                    print('WARNING: Cannot produce chains from multivariate sampling.')
+                    print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
+                    print('         This can be due to errors being much larger than the accepted limits.')
+                    print('         Exit.')
+                return
+                
         lnl_chains = np.zeros(Nsample)
         for i in range(Nsample):
             lnl_chains[i] = -0.5 * np.matmul((par_chains[i,:]-popt), np.matmul(pcov, (par_chains[i,:]-popt)))
@@ -1038,13 +1056,24 @@ class InferenceFluctuationFitting(object):
 
         MC_pars = np.zeros((self.mcmc_Nresamp, len(popt)))
         isamp = 0
+        ibad = 0
         while isamp < self.mcmc_Nresamp:
             param = np.random.multivariate_normal(popt, pcov)
             cond = np.isfinite(self.prior_fluctuation(param, parinfo)) # make sure params are within limits
             if cond:
                 MC_pars[isamp,:] = param
                 isamp += 1
-        
+            else:
+                ibad += 1
+            if ibad == self.mcmc_Nresamp:
+                if not self.silent:
+                    print('WARNING: Cannot produce chains from multivariate sampling.')
+                    print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
+                    print('         This can be due to errors being much larger than the accepted limits.')
+                    print('         Continue without uncertainties.')
+                for isa in range(self.mcmc_Nresamp): MC_pars[isa,:] = popt
+                isamp = self.mcmc_Nresamp
+                
         for imc in range(self.mcmc_Nresamp):
             # Get MC model
             self.setpar_fluctuation(MC_pars[imc,:], parinfo)

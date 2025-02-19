@@ -237,8 +237,8 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
         
         Parameters
         ----------
-        - filename (str): full path to the file, without extension 
-        which are .pkl and .txt (2 files)
+        - filename (str): full path to the file, without extension, 
+        because they are .pkl and .txt (2 files)
             
         Outputs
         ----------
