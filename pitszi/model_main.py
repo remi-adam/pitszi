@@ -231,12 +231,14 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
     # Save parameters
     #==================================================
     
-    def save_model(self):
+    def save_model(self, filename=None):
         """
         Save the current model object.
         
         Parameters
         ----------
+        - filename (str): full path to the file, without extension 
+        which are .pkl and .txt (2 files)
             
         Outputs
         ----------
@@ -244,18 +246,26 @@ class Model(ModelLibrary, ModelSampling, ModelMock):
 
         """
 
+        # File names
+        if filename is None:
+            fn1 = self.output_dir+'/model_parameters.pkl'
+            fn2 = self.output_dir+'/model_parameters.txt'
+        else:
+            fn1 = filename+'.pkl'
+            fn2 = filename+'.txt'
+
         # Create the output directory if needed
         if not os.path.exists(self.output_dir): os.mkdir(self.output_dir)
 
         # Save
-        with open(self.output_dir+'/model_parameters.pkl', 'wb') as pfile:
+        with open(fn1, 'wb') as pfile:
             #pickle.dump(self.__dict__, pfile, pickle.HIGHEST_PROTOCOL)
             dill.dump(self.__dict__, pfile)
 
         # Text file for user
         par = self.__dict__
         keys = list(par.keys())
-        with open(self.output_dir+'/model_parameters.txt', 'w') as txtfile:
+        with open(fn2, 'w') as txtfile:
             for k in range(len(keys)):
                 txtfile.write('--- '+(keys[k])+'\n')
                 txtfile.write('    '+str(par[keys[k]])+'\n')

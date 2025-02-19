@@ -197,31 +197,41 @@ class Data():
     # Save parameters
     #==================================================
     
-    def save_data(self):
+    def save_data(self, filename=None):
         """
         Save the current data object.
         
         Parameters
         ----------
-            
+        - filename (str): full path to the file, without extension, 
+        because they are .pkl and .txt (2 files)
+                        
         Outputs
         ----------
         The parameters are saved in the output directory
 
         """
 
+        # File names
+        if filename is None:
+            fn1 = self.output_dir+'/data_parameters.pkl'
+            fn2 = self.output_dir+'/data_parameters.txt'
+        else:
+            fn1 = filename+'.pkl'
+            fn2 = filename+'.txt'
+        
         # Create the output directory if needed
         if not os.path.exists(self.output_dir): os.mkdir(self.output_dir)
 
         # Save
-        with open(self.output_dir+'/data_parameters.pkl', 'wb') as pfile:
+        with open(fn1, 'wb') as pfile:
             #pickle.dump(self.__dict__, pfile, pickle.HIGHEST_PROTOCOL)
             dill.dump(self.__dict__, pfile)
 
         # Text file for user
         par = self.__dict__
         keys = list(par.keys())
-        with open(self.output_dir+'/data_parameters.txt', 'w') as txtfile:
+        with open(fn2, 'w') as txtfile:
             for k in range(len(keys)):
                 txtfile.write('--- '+(keys[k])+'\n')
                 txtfile.write('    '+str(par[keys[k]])+'\n')
