@@ -179,7 +179,10 @@ class InferenceFluctuationFitting(object):
                     print('         This can be due to errors being much larger than the accepted limits.')
                     print('         Exit.')
                 return
-                
+        # Add explicitely the best fit in the chain
+        par_chains[-1,:] = popt
+
+        # Compute the associated likelihood
         lnl_chains = np.zeros(Nsample)
         for i in range(Nsample):
             lnl_chains[i] = -0.5 * np.matmul((par_chains[i,:]-popt), np.matmul(pcov, (par_chains[i,:]-popt)))
@@ -992,7 +995,7 @@ class InferenceFluctuationFitting(object):
         #========== Show results
         if show_fit_result:
             self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov,
-                                              truth=true_param, extname='_Fluctuation')
+                                              truth=true_param, extname='_Fluctuation')            
             self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo,
                                                   true_pk3d=true_pk3d)
         

@@ -183,6 +183,10 @@ class InferenceRadialFitting(object):
                     print('         Exit.')
                 return
         
+        # Add explicitely the best fit in the chain
+        par_chains[-1,:] = popt
+
+        # Compute the associated likelihood
         lnl_chains = np.zeros(Nsample)
         for i in range(Nsample):
             lnl_chains[i] = -0.5 * np.matmul((par_chains[i,:]-popt), np.matmul(pcov, (par_chains[i,:]-popt)))
