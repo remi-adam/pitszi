@@ -572,8 +572,43 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self._pk_setup_done = True
         if not self.silent:
             print('----- The setup is done -----')
- 
-            
+
+
+    #==================================================
+    # Setup: preparation
+    #==================================================
+    
+    def pk_setup_fluctuation_model(self, Nmc=1000):
+        """
+        This function redefine the setup for the reference model 
+        Pk. To be used in the case the reference model of pressure 
+        fluctuation has changed
+        
+        Parameters
+        ----------
+        - Nmc (int): the number of monte carlo to compute the model/noise statistics
+
+        Outputs
+        ----------
+        Necessary product are computed and defined as hidden parameters
+
+        """
+
+        #---------- Info
+        if not self.silent:
+            print('----- Reload setup for model Pk -----')
+            if not self._pk_setup_done :
+                print('      The setup was not done.')
+                print('      Run pk_setup() before you can update the model Pk via pk_setup_fluctuation_model().')
+        
+        #---------- Pk update
+        _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
+        
+        self._pk2d_modref        = model_mean.to_value('kpc2')
+        self._pk2d_modref_rms    = np.diag(model_cov.to_value('kpc4'))**0.5
+        self._pk2d_modref_cov    = model_cov.to_value('kpc4')
+        
+        
     #==================================================
     # Set the weight to inverse model
     #==================================================
