@@ -175,7 +175,7 @@ class InferenceRadialFitting(object):
             else:
                 ibad += 1
             # Security in case issu in multivariate sampling
-            if ibad == Nsample:                
+            if ibad == 5*Nsample:                
                 if not self.silent:
                     print('WARNING: Cannot produce chains from multivariate sampling.')
                     print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
@@ -1104,7 +1104,7 @@ class InferenceRadialFitting(object):
                 isamp += 1
             else:
                 ibad += 1
-            if ibad == self.mcmc_Nresamp:
+            if ibad == 5*self.mcmc_Nresamp:
                 if not self.silent:
                     print('WARNING: Cannot produce chains from multivariate sampling.')
                     print('         Tried '+str(ibad+isamp)+' times, failed '+str(ibad)+' times')
@@ -1146,5 +1146,4 @@ class InferenceRadialFitting(object):
         utils_plot.show_fit_result_pressure_profile(self.output_dir+'/CurveFit_Profile_results_P_profile.pdf',
                                                     r3d, best_pressure_profile, MC_pressure_profile,
                                                     true_pressure_profile=true_pressure_profile)
-        
         
