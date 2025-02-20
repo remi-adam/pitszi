@@ -552,12 +552,6 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             self._pk2d_bkg        = 0 * self._pk2d_data
             self._pk2d_bkg_rms    = 0 * self._pk2d_data
             self._pk2d_bkg_cov    = 0 * self._pk2d_noise_cov
-            
-        if self.method_use_covmat:
-            self._pk2d_invcov        = np.linalg.inv(noise_cov.to_value('kpc4') + self._pk2d_bkg_cov)
-            self._pk2d_invcov_totref = np.linalg.inv(noise_cov.to_value('kpc4')
-                                                     + model_cov.to_value('kpc4')
-                                                     + self._pk2d_bkg_cov)
         
         #---------- Convertion
         if not self.silent: print('    * Setup window function conversion')
@@ -914,14 +908,19 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     
     def get_pk2d_noise_statistics(self,
                                   physical=False,
-                                  Nmc=None):
+                                  Nmc=None,
+                                  apply_nuisance=False):
         """
         This function compute the noise properties associated
-        with the data noise
+        with the data noise. Default does not include the nuisance 
+        parameter renormalization.
         
         Parameters
         ----------
         - physical (bool): set to true to have output in kpc units, else arcsec units
+        - Nmc (int): number of realization to use (default is to use all available)
+        - apply_nuisance (bool): normalize the noise properties with the current value 
+        of the corresponding nuisance parameter (self.nuisance_Anoise)
 
         Outputs
         ----------
@@ -1019,9 +1018,12 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             noise_pk2d_covmat = noise_pk2d_covmat * u.arcsec**4
 
         #---------- return
-        return k2d, noise_pk2d_mean, noise_pk2d_covmat
+        if apply_nuisance:
+            return k2d, self.nuisance_Anoise * noise_pk2d_mean, self.nuisance_Anoise**2 * noise_pk2d_covmat
+        else:
+            return k2d, noise_pk2d_mean, noise_pk2d_covmat
 
-    
+        
     #==================================================
     # Compute model variance statistics
     #==================================================
@@ -1127,13 +1129,18 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     # Compute extra background statistics
     #==================================================
     
-    def get_pk2d_bkg_statistics(self, physical=False):
+    def get_pk2d_bkg_statistics(self,
+                                physical=False,
+                                apply_nuisance=False):
         """
-        This function compute the extra background properties
+        This function compute the extra background properties. Default 
+        does not include the nuisance parameter renormalization.
         
         Parameters
         ----------
         - physical (bool): set to true to have output in kpc units, else arcsec units
+        - apply_nuisance (bool): normalize the background properties with the current value 
+        of the corresponding nuisance parameter (self.nuisance_Abkg)
 
         Outputs
         ----------
@@ -1234,8 +1241,11 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             bkg_pk2d_covmat = bkg_pk2d_covmat * u.arcsec**4
 
         #---------- return
-        return k2d, bkg_pk2d_mean, bkg_pk2d_covmat
-
+        if apply_nuisance:
+            return k2d, self.nuisance_Abkg * bkg_pk2d_mean, self.nuisance_Abkg**2 * bkg_pk2d_covmat
+        else:
+            return k2d, bkg_pk2d_mean, bkg_pk2d_covmat
+    
     
     #==================================================
     # Model for pk2d fit brute force

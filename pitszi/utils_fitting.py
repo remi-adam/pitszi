@@ -205,6 +205,8 @@ def chains_statistics(param_chains,
     - par_percentile (list of float): median, lower bound at CL, upper bound at CL
     
     """
+
+    if show: print('----- Parameter sampling: chain statistics -----')
     
     if outfile is not None:
         file = open(outfile,'w')

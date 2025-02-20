@@ -153,9 +153,11 @@ class InferenceFluctuationFitting(object):
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
         #---------- Output best fit and errors
+        print('----- Parameter best-fit: -----')
         file = open(self.output_dir+'/CurveFit'+extname+'_main_result.txt','w')
         for ipar in range(Nparam):
             bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
+            print('     param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval)
             file.write('param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval+'\n')
         file.close() 
         
@@ -544,8 +546,8 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def lnlike_fluctuation(self, param, parinfo,
-                           kind='projection',
-                           include_model_error=False):
+                           error_stat,
+                           kind='projection',):
         """
         This is the likelihood function used for the fit of the fluctuation.
             
@@ -553,10 +555,10 @@ class InferenceFluctuationFitting(object):
         ----------
         - param (np array): the value of the test parameters
         - parinfo (dict): see parinfo in mcmc_fluctuation
+        - error_stat (np.array): the error statistics, either the Pk rms or the
+        inverse covariance matrix depending if self.method_use_covmat is True or False
         - kind (str): projection or brute, for using 
         get_pk2d_model_proj or get_pk2d_model_brute to compute the model
-        - include_model_error (bool): set to true to include intrinsic model uncertainty
-        assuming the reference model
 
         Outputs
         ----------
@@ -583,22 +585,11 @@ class InferenceFluctuationFitting(object):
         # collect products
         residual_test = self._pk2d_data - pk2d_test
         
-        if self.method_use_covmat:
-            if include_model_error:
-                inverse_cov = self._pk2d_invcov_totref
-            else:
-                inverse_cov = self._pk2d_invcov
-        else:
-            if include_model_error:
-                variance = self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2 + self._pk2d_bkg_rms**2
-            else:
-                variance = self._pk2d_noise_rms**2 + self._pk2d_bkg_rms**2
-        
         # compute lnL
         if self.method_use_covmat:
-            lnL = -0.5*np.matmul(residual_test, np.matmul(inverse_cov, residual_test))
+            lnL = -0.5*np.matmul(residual_test, np.matmul(error_stat, residual_test))
         else:
-            lnL = -0.5*np.nansum(residual_test**2 / variance)
+            lnL = -0.5*np.nansum(residual_test**2 / error_stat)
             
         lnL += prior
         
@@ -724,15 +715,28 @@ class InferenceFluctuationFitting(object):
             print('-----')
 
         #========== Define the MCMC setup
+        # Backend
         backend = utils_fitting.define_emcee_backend(sampler_file, sampler_exist,
                                                      self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
 
+        # Moves
         if kind == 'projection': moves = emcee.moves.StretchMove(a=2.0)
         if kind == 'brute':      moves = emcee.moves.KDEMove()
 
+        # Error statistics to pass
+        if self.method_use_covmat:
+            cov = self.nuisance_Anoise**2*self._pk2d_noise_cov + self.nuisance_Abkg**2*self._pk2d_bkg_cov
+            if include_model_error: cov += self._pk2d_modref_cov
+            error_stat = np.linalg.inv(cov)
+        else:
+            error_stat =  self.nuisance_Anoise**2 * self._pk2d_noise_rms**2 # noise rms
+            error_stat += self.nuisance_Abkg**2 * self._pk2d_bkg_rms**2     # Add bkg
+            if include_model_error: error_stat += self._pk2d_modref_rms**2  # Add model
+
+        # sampler
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         self.lnlike_fluctuation, 
-                                        args=[parinfo, kind, include_model_error], 
+                                        args=[parinfo, error_stat, kind], 
                                         pool=mypool,
                                         moves=moves,
                                         backend=backend)
@@ -964,17 +968,14 @@ class InferenceFluctuationFitting(object):
         #========== Defines the fit parameters
         par_list, par0_value, par0_err, par_min, par_max = self.defpar_fluctuation(parinfo)
 
-        #========== Define the sigma
+        #========== Define sigma
         if self.method_use_covmat:
-            if include_model_error:
-                sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov + self._pk2d_modref_cov
-            else:
-                sigma = self._pk2d_noise_cov + self._pk2d_bkg_cov
+            sigma = self.nuisance_Anoise**2 * self._pk2d_noise_cov + self.nuisance_Abkg**2 * self._pk2d_bkg_cov
+            if include_model_error: sigma += self._pk2d_modref_cov
         else:
-            if include_model_error:
-                sigma = (self._pk2d_noise_rms**2 + self._pk2d_modref_rms**2 + self._pk2d_bkg_rms**2)**0.5
-            else:
-                sigma = (self._pk2d_noise_rms**2 + self._pk2d_bkg_rms**2)**0.5
+            var = self.nuisance_Anoise**2 * self._pk2d_noise_rms**2 + self.nuisance_Abkg**2 * self._pk2d_bkg_rms**2
+            if include_model_error: var += self._pk2d_modref_rms**2
+            sigma = var**0.5
 
         #========== Fitting function
         def fitfunc(x, *pars):

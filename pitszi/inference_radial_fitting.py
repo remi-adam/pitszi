@@ -156,9 +156,11 @@ class InferenceRadialFitting(object):
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
         #---------- Output best fit and errors
+        print('----- Parameter best-fit: -----')
         file = open(self.output_dir+'/CurveFit'+extraname+'_main_result.txt','w')
         for ipar in range(Nparam):
             bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
+            print('     param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval)
             file.write('param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval+'\n')
         file.close() 
             
