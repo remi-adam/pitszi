@@ -206,7 +206,7 @@ def chains_statistics(param_chains,
     
     """
 
-    if show: print('----- Parameter sampling: chain statistics -----')
+    if show: print('   --- Parameter sampling: chain statistics ---')
     
     if outfile is not None:
         file = open(outfile,'w')

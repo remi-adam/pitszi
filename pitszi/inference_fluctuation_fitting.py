@@ -154,7 +154,7 @@ class InferenceFluctuationFitting(object):
 
         #---------- Output best fit and errors
         print('----- Parameter best-fit: -----')
-        file = open(self.output_dir+'/CurveFit'+extname+'_main_result.txt','w')
+        file = open(self.output_dir+'/CurveFit'+extname+'_statistics_main.txt','w')
         for ipar in range(Nparam):
             bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
             print('     param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval)
