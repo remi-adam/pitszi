@@ -581,6 +581,7 @@ class Data():
                                        reso,
                                        Nbin=20,
                                        scale='log',
+                                       lam=None,
                                        show=False):
         """
         Useful function to derive the noise model from a jacknife by
@@ -597,6 +598,8 @@ class Data():
         - reso (float): the map resolution in arcsec
         - Nbin (int): number of bin for the Pk
         - scale (str): log or lin, to define the scale used in Pk
+        - lam (float): optional keyword passed to make_smoothing_spline, used to control the
+        smoothness. If None, determined automatically.
         - show (bool): check what is done with plots
 
         Outputs
@@ -624,7 +627,7 @@ class Data():
         w = ~np.isnan(pk)
         #spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
         #spec_mod = interp1d(np.log10(k[w]), np.log10(pk[w]), bounds_error=False, fill_value="extrapolate", kind='linear')
-        spec_mod = make_smoothing_spline(np.log10(k[w]), np.log10(pk[w]), lam=None)
+        spec_mod = make_smoothing_spline(np.log10(k[w]), np.log10(pk[w]), lam=lam)
     
         # Show
         if show:
