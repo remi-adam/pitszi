@@ -15,6 +15,7 @@ from astropy.coordinates import SkyCoord
 from astropy import constants as const
 from astropy.wcs import WCS
 from scipy.interpolate import interp1d
+from scipy.interpolate import make_smoothing_spline
 from scipy.ndimage import gaussian_filter
 import copy
 import pickle
@@ -622,8 +623,9 @@ class Data():
         pk = pk / fsky
         w = ~np.isnan(pk)
         #spec_mod = interp1d(k[w], pk[w], bounds_error=False, fill_value="extrapolate", kind='linear')
-        spec_mod = interp1d(np.log10(k[w]), np.log10(pk[w]), bounds_error=False, fill_value="extrapolate", kind='linear')
-
+        #spec_mod = interp1d(np.log10(k[w]), np.log10(pk[w]), bounds_error=False, fill_value="extrapolate", kind='linear')
+        spec_mod = make_smoothing_spline(np.log10(k[w]), np.log10(pk[w]), lam=None)
+    
         # Show
         if show:
             import matplotlib.pyplot as plt
