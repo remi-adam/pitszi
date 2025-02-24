@@ -136,7 +136,7 @@ class InferenceFluctuationFitting(object):
         - pcov (2d array): posterior covariance matrix
         - conf (float): confidence limit in % used in results
         - truth (list): the list of expected parameter value for the fit
-        - extname (string): extra name to add after MCMC in file name
+        - extname (string): extra name to add after CurveFit in file name
 
         Outputs
         ----------
@@ -610,6 +610,7 @@ class InferenceFluctuationFitting(object):
                              filename_sampler=None,
                              show_fit_result=False,
                              set_bestfit=False,
+                             extname='_Fluctuation',
                              true_pk3d=None,
                              true_param=None):
         """
@@ -643,6 +644,7 @@ class InferenceFluctuationFitting(object):
         assuming the reference model
         - filename_sampler (str): the file name of the sampler to use.
         - show_fit_result (bool): set to true to produce plots for fitting results
+        - extname (string): extra name to add after MCMC results file names
         - set_bestfit (bool): set the best fit to the model
         - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
         in the form {'k':array in kpc-1, 'pk':array in kpc3}
@@ -672,7 +674,7 @@ class InferenceFluctuationFitting(object):
         
         #========== Check if the MCMC sampler was already recorded
         if filename_sampler is None:
-            sampler_file = self.output_dir+'/pitszi_MCMC_Fluctuation_'+kind+'_sampler.h5'
+            sampler_file = self.output_dir+'/pitszi_MCMC'+extname+'_sampler.h5'
         else:
             sampler_file = filename_sampler
             
@@ -753,10 +755,10 @@ class InferenceFluctuationFitting(object):
         if show_fit_result:
             self.get_mcmc_chains_outputs_results(par_list, sampler,
                                                  truth=true_param,
-                                                 extname='_Fluctuation_'+kind)
+                                                 extname=extname)
             self.run_mcmc_fluctuation_results(sampler, parinfo,
                                               true_pk3d=true_pk3d,
-                                              extname='_'+kind)
+                                              extname=extname)
 
         #========== Compute the best-fit model and set it
         if set_bestfit:
@@ -773,7 +775,7 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def run_mcmc_fluctuation_results(self, sampler, parinfo,
-                                     true_pk3d=None, extname=''):
+                                     true_pk3d=None, extname='_Fluctuation'):
         """
         This function is used to show the results of the MCMC
         regarding the fluctuation
@@ -784,6 +786,7 @@ class InferenceFluctuationFitting(object):
         - parinfo (dict): same as mcmc_fluctuation
         - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
         in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        - extname (string): extra name to add after MCMC results file names
         
         Outputs
         ----------
@@ -837,7 +840,7 @@ class InferenceFluctuationFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_input_image1.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC'+extname+'_results_input_image1.pdf',
                                          self.data1.image,
                                          self._dy_image1,
                                          self._ymap_sphA1,
@@ -847,7 +850,7 @@ class InferenceFluctuationFitting(object):
                                          noise_mc1,
                                          mask=self.data1.mask,
                                          visu_smooth=10)
-        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_input_image2.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/MCMC'+extname+'_results_input_image2.pdf',
                                          self.data2.image,
                                          self._dy_image2,
                                          self._ymap_sphA2,
@@ -863,14 +866,14 @@ class InferenceFluctuationFitting(object):
             covmat_bkg = self._pk2d_bkg_cov
         else:
             covmat_bkg = None
-        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_covariance.pdf',
+        utils_plot.show_fit_result_covariance(self.output_dir+'/MCMC'+extname+'_results_covariance.pdf',
                                               self._pk2d_noise_cov,
                                               model_pk2d_covmat.to_value('kpc4'),
                                               covmat_model=self._pk2d_modref_cov,
                                               covmat_bkg=covmat_bkg)
         
         #========== Plot the Pk2d constraint
-        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_pk2d.pdf',
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/MCMC'+extname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'),
                                         np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
@@ -880,7 +883,7 @@ class InferenceFluctuationFitting(object):
                                         best_pk2d_bkg, MC_pk2d_bkg)
 
         #========== Plot the Pk3d constraint
-        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC_Fluctuation'+extname+'_results_pk3d.pdf',
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/MCMC'+extname+'_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)
@@ -894,6 +897,7 @@ class InferenceFluctuationFitting(object):
                                  kind='projection',
                                  include_model_error=False,
                                  show_fit_result=False,
+                                 extname='_Fluctuation',
                                  set_bestfit=False,
                                  true_pk3d=None,
                                  true_param=None):
@@ -936,6 +940,7 @@ class InferenceFluctuationFitting(object):
         - include_model_error (bool): set to true to include intrinsic model uncertainty
         assuming the reference model
         - show_fit_result (bool): set to true to produce plots for fitting results
+        - extname (string): extra name to add after CurveFit results file names
         - set_bestfit (bool): set the best fit to the model
         - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
         in the form {'k':array in kpc-1, 'pk':array in kpc3}
@@ -996,8 +1001,9 @@ class InferenceFluctuationFitting(object):
         #========== Show results
         if show_fit_result:
             self.get_curvefit_outputs_results(par_list, parinfo, par_opt, par_cov,
-                                              truth=true_param, extname='_Fluctuation')            
+                                              truth=true_param, extname=extname)            
             self.run_curvefit_fluctuation_results(par_opt, par_cov, parinfo,
+                                                  extname=extname,
                                                   true_pk3d=true_pk3d)
         
         #========== Compute the best-fit model and set it
@@ -1014,6 +1020,7 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def run_curvefit_fluctuation_results(self, popt, pcov, parinfo,
+                                         extname='_Fluctuation',
                                          true_pk3d=None):
         """
         This function is used to show the results of the curvefit
@@ -1024,6 +1031,7 @@ class InferenceFluctuationFitting(object):
         - popt (1d array): parameter best fit
         - pcov (2d array): parameter covariance matrix
         - parinfo (dict): same as mcmc_fluctuation
+        - extname (string): extra name to add after CurveFit results file names
         - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
         in the form {'k':array in kpc-1, 'pk':array in kpc3}
         
@@ -1096,7 +1104,7 @@ class InferenceFluctuationFitting(object):
             MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
 
         #========== Plot the fitted image data
-        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image1.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit'+extname+'_results_input_image1.pdf',
                                          self.data1.image,
                                          self._dy_image1,
                                          self._ymap_sphA1,
@@ -1106,7 +1114,7 @@ class InferenceFluctuationFitting(object):
                                          noise_mc1,
                                          mask=self.data1.mask,
                                          visu_smooth=10)
-        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit_Fluctuation_results_input_image2.pdf',
+        utils_plot.show_input_delta_ymap(self.output_dir+'/CurveFit'+extname+'_results_input_image2.pdf',
                                          self.data2.image,
                                          self._dy_image2,
                                          self._ymap_sphA2,
@@ -1122,14 +1130,14 @@ class InferenceFluctuationFitting(object):
             covmat_bkg = self._pk2d_bkg_cov
         else:
             covmat_bkg = None
-        utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit_Fluctuation_results_covariance.pdf',
+        utils_plot.show_fit_result_covariance(self.output_dir+'/CurveFit'+extname+'_results_covariance.pdf',
                                               self._pk2d_noise_cov,
                                               model_pk2d_covmat.to_value('kpc4'),
                                               covmat_model=self._pk2d_modref_cov,
                                               covmat_bkg=covmat_bkg)
         
         #========== Plot the Pk2d constraint
-        utils_plot.show_fit_result_pk2d(self.output_dir+'/CurveFit_Fluctuation_results_pk2d.pdf',
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/CurveFit'+extname+'_results_pk2d.pdf',
                                         self._kctr_kpc, self._pk2d_data,
                                         model_pk2d_ref.to_value('kpc2'),
                                         np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
@@ -1139,7 +1147,7 @@ class InferenceFluctuationFitting(object):
                                         best_pk2d_bkg, MC_pk2d_bkg)
         
         #========== Plot the Pk3d constraint
-        utils_plot.show_fit_result_pk3d(self.output_dir+'/CurveFit_Fluctuation_results_pk3d.pdf',
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/CurveFit'+extname+'_results_pk3d.pdf',
                                         k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
                                         MC_pk3d,
                                         true_pk3d=true_pk3d)
