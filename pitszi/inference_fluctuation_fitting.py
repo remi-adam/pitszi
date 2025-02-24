@@ -726,15 +726,20 @@ class InferenceFluctuationFitting(object):
         if kind == 'brute':      moves = emcee.moves.KDEMove()
 
         # Error statistics to pass
+        if self._cross_spec:
+            noise_ampli = 1
+        else:
+            noise_ampli = self.nuisance_Anoise
+
         if self.method_use_covmat:
-            cov = self.nuisance_Anoise**2*self._pk2d_noise_cov + self.nuisance_Abkg**2*self._pk2d_bkg_cov
+            cov = noise_ampli**2*self._pk2d_noise_cov + self.nuisance_Abkg**2*self._pk2d_bkg_cov
             if include_model_error: cov += self._pk2d_modref_cov
             error_stat = np.linalg.inv(cov)
         else:
-            error_stat =  self.nuisance_Anoise**2 * self._pk2d_noise_rms**2 # noise rms
+            error_stat =  noise_ampli**2 * self._pk2d_noise_rms**2          # noise rms
             error_stat += self.nuisance_Abkg**2 * self._pk2d_bkg_rms**2     # Add bkg
             if include_model_error: error_stat += self._pk2d_modref_rms**2  # Add model
-
+            
         # sampler
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         self.lnlike_fluctuation, 
@@ -974,14 +979,20 @@ class InferenceFluctuationFitting(object):
         par_list, par0_value, par0_err, par_min, par_max = self.defpar_fluctuation(parinfo)
 
         #========== Define sigma
+        # The noise ampli should be 1 for Xspec, but can be different in auto spec since fitted
+        if self._cross_spec:
+            noise_ampli = 1
+        else:
+            noise_ampli = self.nuisance_Anoise
+        # Extract the noise contribution depending on the method
         if self.method_use_covmat:
-            sigma = self.nuisance_Anoise**2 * self._pk2d_noise_cov + self.nuisance_Abkg**2 * self._pk2d_bkg_cov
+            sigma = noise_ampli**2 * self._pk2d_noise_cov + self.nuisance_Abkg**2 * self._pk2d_bkg_cov
             if include_model_error: sigma += self._pk2d_modref_cov
         else:
-            var = self.nuisance_Anoise**2 * self._pk2d_noise_rms**2 + self.nuisance_Abkg**2 * self._pk2d_bkg_rms**2
+            var = noise_ampli**2 * self._pk2d_noise_rms**2 + self.nuisance_Abkg**2 * self._pk2d_bkg_rms**2
             if include_model_error: var += self._pk2d_modref_rms**2
             sigma = var**0.5
-
+        
         #========== Fitting function
         def fitfunc(x, *pars):
             params = []

@@ -148,9 +148,22 @@ def chains_2Dplots_corner(param_chains,
     Nchain = len(param_chains[:,0,0])
     par_flat = param_chains.reshape(param_chains.shape[0]*param_chains.shape[1], param_chains.shape[2])
 
+    # Test if parameters have dynamical range
+    rng = np.zeros((Npar,2))
+    for ip in range(Npar):
+        mm = np.amin(par_flat[:,ip])
+        pp = np.amax(par_flat[:,ip])
+        if mm != pp:
+            rng[ip,0] = mm
+            rng[ip,1] = pp
+        else:
+            rng[ip,0] = mm*0.9
+            rng[ip,1] = pp*1.1
+    
     # Corner plot using corner
     figure = corner.corner(par_flat,
                            bins=Nbin_hist,
+                           range=rng,
                            color='k',
                            smooth=smooth,
                            labels=parname,
@@ -867,12 +880,10 @@ def show_fit_result_pk2d(figfile,
                                     (100-(100-ci2)/2.0, 50, (100-ci2)/2.0), axis=0)
 
     #----- Compute uncertainty
-    err_noise = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*pk2d_data_err_noise
-    err_nbkg  = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_noise**2
-                                                                + pk2d_data_err_bkg**2)**0.5
-    err_tot   = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(pk2d_data))*(pk2d_data_err_model**2
-                                                                + pk2d_data_err_noise**2
-                                                                + pk2d_data_err_bkg**2)**0.5
+    err_noise = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(np.abs(pk2d_data)))*pk2d_data_err_noise
+    err_tot   = np.sqrt(2*np.pi*k2d**2)/(2*np.sqrt(np.abs(pk2d_data)))*(pk2d_data_err_model**2
+                                                                        + pk2d_data_err_noise**2
+                                                                        + pk2d_data_err_bkg**2)**0.5
     
     #----- Plot the result
     plt.rcParams.update({'font.size': 12})
@@ -880,22 +891,30 @@ def show_fit_result_pk2d(figfile,
     frame1 = fig.add_axes((.15,.3,.8,.6))
 
     # Data
-    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_tot, marker='.', ls='', color='lightgrey',
-                 label='Data (noise+bkg+model uncertainties)')
-    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_nbkg, marker='.', ls='', color='grey',
-                 label='Data (noise+bkg uncertainty)')
-    plt.errorbar(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_data), err_noise, marker='.', ls='', color='k',
+    wplu = pk2d_data >= 0
+    wmin = pk2d_data < 0
+    plt.errorbar(k2d[wplu], np.sqrt(2*np.pi*k2d[wplu]**2*pk2d_data[wplu]), err_tot[wplu],
+                 marker='.', ls='', color='darkgrey',
+                 label='Data (signal+noise uncertainties)')
+    plt.errorbar(k2d[wplu], np.sqrt(2*np.pi*k2d[wplu]**2*pk2d_data[wplu]), err_noise[wplu],
+                 marker='.', ls='', color='k',
                  label='Data (noise uncertainty)')
-
+    plt.errorbar(k2d[wmin], np.sqrt(-2*np.pi*k2d[wmin]**2*pk2d_data[wmin]), err_tot[wmin],
+                 marker='.', markerfacecolor='none', ls='', color='darkgrey')
+    plt.errorbar(k2d[wmin], np.sqrt(-2*np.pi*k2d[wmin]**2*pk2d_data[wmin]), err_noise[wmin],
+                 marker='.', markerfacecolor='none', ls='', color='k', label='Negative data')
+    
     # Model reference
-    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)), color='magenta', label='Best-fit model and intrinsic scatter')
+    plt.plot(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_modref)),
+             color='magenta', label='Best-fit model and intrinsic scatter')
     up, low = pk2d_modref+pk2d_data_err_model, pk2d_modref-pk2d_data_err_model
     low[low<=0] = 0
     plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*(up)), y2=np.sqrt(2*np.pi*k2d**2*(low)),
                      color='magenta', alpha=0.3)
     
     # Model fit
-    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc1[1,:]), color='b', ls='--', label='Model median, 68% and 95% C.I.')
+    plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc1[1,:]),
+               color='b', ls='--', label='Model median, 68% and 95% C.I.')
     plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc1[0,:]), np.sqrt(2*np.pi*k2d**2*pk2d_perc1[2,:]),
                      color='blue', alpha=0.3)
     plt.fill_between(k2d, np.sqrt(2*np.pi*k2d**2*pk2d_perc2[0,:]), np.sqrt(2*np.pi*k2d**2*pk2d_perc2[2,:]),
@@ -924,7 +943,7 @@ def show_fit_result_pk2d(figfile,
     # Total
     plt.loglog(k2d, np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_bkg_best + pk2d_modref)),
                color='red', ls='-', label='Total best-fit')
-        
+    
     if true_pk2d is not None:
         plt.plot(true_pk2d['k'], np.sqrt(2*np.pi*true_pk2d['k']**2*true_pk2d['pk']),
                  label='True $P_k$', color='orange')
@@ -933,22 +952,26 @@ def show_fit_result_pk2d(figfile,
     plt.yscale('log')
     plt.xlim(np.amin(k2d)*0.9, np.amax(k2d)*1.1)
     
-    plt.ylim(np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*1e-3,
-             np.nanmax(np.sqrt(2*np.pi*k2d**2*pk2d_data)+err_tot)*2)
+    plt.ylim(np.nanmax(np.sqrt(2*np.pi*k2d**2*np.abs(pk2d_data))+err_tot)*1e-3,
+             np.nanmax(np.sqrt(2*np.pi*k2d**2*np.abs(pk2d_data))+err_tot)*2)
     
     plt.legend(fontsize=10)
 
     frame2 = fig.add_axes((.15,.1,.8,.2))
-    dat = np.sqrt(2*np.pi*k2d**2*pk2d_data)
-    mod = np.sqrt(2*np.pi*k2d**2*(pk2d_noise_best + pk2d_bkg_best + pk2d_modref))
-    plt.plot(k2d, (dat-mod)/err_tot, marker='o', color='lightgrey')
-    plt.plot(k2d, (dat-mod)/err_nbkg, marker='o', color='grey')
-    plt.plot(k2d, (dat-mod)/err_noise, marker='o', color='k')
-    plt.axhline(0, color='k', linestyle='-')
-    plt.axhline(+3, color='k', linestyle='--')
-    plt.axhline(-3, color='k', linestyle='--')
-    plt.axhline(+5, color='k', linestyle='--')
-    plt.axhline(-5, color='k', linestyle='--')
+    dat_p =  np.sqrt(2*np.pi*k2d[wplu]**2*pk2d_data[wplu])
+    dat_m = -np.sqrt(-2*np.pi*k2d[wmin]**2*pk2d_data[wmin])
+    mod_p =  np.sqrt(2*np.pi*k2d[wplu]**2*(pk2d_noise_best[wplu] + pk2d_bkg_best[wplu] + pk2d_modref[wplu]))
+    mod_m =  np.sqrt(2*np.pi*k2d[wmin]**2*(pk2d_noise_best[wmin] + pk2d_bkg_best[wmin] + pk2d_modref[wmin]))
+    plt.plot(k2d[wplu], (dat_p-mod_p)/err_tot[wplu], marker='o', ls='', color='darkgrey')
+    plt.plot(k2d[wplu], (dat_p-mod_p)/err_noise[wplu], marker='o', ls='', color='k')
+    plt.plot(k2d[wmin], (dat_m-mod_m)/err_tot[wmin], marker='o', ls='', markerfacecolor='none', color='darkgrey')
+    plt.plot(k2d[wmin], (dat_m-mod_m)/err_noise[wmin], marker='o', ls='', markerfacecolor='none', color='k')
+    
+    plt.axhline(0,  color='k', linestyle='-', lw=0.5)
+    plt.axhline(+3, color='k', linestyle='--', lw=0.5)
+    plt.axhline(-3, color='k', linestyle='--', lw=0.5)
+    plt.axhline(+5, color='k', linestyle='--', lw=0.5)
+    plt.axhline(-5, color='k', linestyle='--', lw=0.5)
     plt.xscale('log')
     plt.xlabel(r'$k$ (kpc$^{-1}$)')
     plt.ylabel('Residual ($\sigma$)')
