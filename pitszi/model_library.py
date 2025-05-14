@@ -1076,7 +1076,7 @@ class ModelLibrary(object):
         """
 
         # List of available authorized models
-        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'User']
+        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'XRISM2025Coma', 'User']
         stats_list = ['gaussian', 'lognormal']
         
         # Check that the input is a dictionary
@@ -1186,6 +1186,44 @@ class ModelLibrary(object):
                       "Ninj": inpar['Ninj'],
                       "Ndis": inpar['Ndis']}
 
+        #---------- Deal with the case of XRISM paper (Eq 2 in https://arxiv.org/pdf/2504.20928v1)
+        if inpar['name'] == 'XRISM2025Coma':
+            # Check the content of the dictionary
+            cond1 = 'Norm' in list(inpar.keys()) and 'slope' in list(inpar.keys())
+            cond2 = 'Linj' in list(inpar.keys()) and 'Ldis' in list(inpar.keys())
+            if not (cond1 and cond2):
+                raise ValueError("The XRISM2025Coma model should contain: {'Norm','slope','Linj','Ldis'}.")
+
+            # Check units
+            try:
+                test = inpar['Linj'].to('kpc')
+            except:
+                raise TypeError("Linj should be homogeneous to kpc")
+            try:
+                test = inpar['Ldis'].to('kpc')
+            except:
+                raise TypeError("Ldis should be homogeneous to kpc")
+            if type(inpar['Norm']) == u.quantity.Quantity:
+                raise TypeError("Norm is the rms of the relative fluctuation, should be dimenssionless")
+            if type(inpar['slope']) == u.quantity.Quantity:
+                raise TypeError("slope should be dimenssionless")
+
+            # Check values
+            if inpar['Norm'] < 0:
+                raise ValueError("Norm should be >= 0")
+            if inpar['Linj'] < 0:
+                raise ValueError("Linj should be >= 0")
+            if inpar['Ldis'] < 0:
+                raise ValueError("Ldis should be >= 0")
+
+            # All good at this stage, setting parameters
+            outpar = {"name" : 'XRISM2025Coma',
+                      "statistics": inpar['statistics'],
+                      "Norm" : inpar['Norm'],
+                      "slope": inpar['slope'],
+                      "Linj" : inpar['Linj'].to('kpc'),
+                      "Ldis" : inpar['Ldis'].to('kpc')}
+
         #---------- Deal with the case of User
         if inpar['name'] == 'User':
             # Check the content of the dictionary
@@ -1242,7 +1280,7 @@ class ModelLibrary(object):
 
         """
 
-        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'User']
+        model_list = ['CutoffPowerLaw', 'ModifiedCutoffPowerLaw', 'XRISM2025Coma', 'User']
 
         if not model['name'] in model_list:
             print('The power spectrum model can :')
@@ -1318,6 +1356,38 @@ class ModelLibrary(object):
             cut_high = np.exp(-(k3d_kpc * Ldis)**Ndis)
             pl       = k3d_kpc**slope
             p3d_k = A**2 * pl*cut_high*cut_low / Normalization # adu * u1 / (u1*k**3) = kpc^3
+
+        #---------- Case of equation 2 from https://arxiv.org/pdf/2504.20928v1
+        elif model['name'] == 'XRISM2025Coma':
+            # Extract params
+            A     = model["Norm"]
+            slope = model['slope']
+            Ldis  = model['Ldis'].to_value('kpc')
+            Linj  = model['Linj'].to_value('kpc')
+            
+            # Define kmin and kmax
+            if kmin_norm is None:
+                kmin = 1/Linj/1e5 # go sufficiently close to zero, with flat pk there
+            else:
+                kmin = kmin_norm.to_value('kpc')
+            if kmax_norm is None:
+                kmax = (-np.log(1e-7))**(1/2)/Ldis # stop when cutoff reduction by 10^7
+            else:
+                kmax = kmax_norm.to_value('kpc')
+            
+            # k array for normalization
+            kvec_norm = np.logspace(np.log10(kmin), np.log10(kmax), Npt_norm) # 1/kpc
+            
+            # First extract the normalization given integrating within some k range
+            low  = (1+(kvec_norm * Linj)**2)**(slope/2)
+            cut_high = np.exp(-(kvec_norm * Ldis)**2)
+            f_k      = low * cut_high
+            Normalization = utils.trapz_loglog(4*np.pi*kvec_norm**2 * f_k, kvec_norm)
+
+            # Then compute Pk at requested scales accounting for the normalization
+            low  = (1+(k3d_kpc * Linj)**2)**(slope/2)
+            cut_high = np.exp(-(k3d_kpc * Ldis)**2)
+            p3d_k = A**2 * cut_high * low / Normalization # adu * u1 / (u1*k**3) = kpc^3
                         
         #---------- Case of User spectrum
         elif model['name'] == 'User':
