@@ -609,6 +609,57 @@ def convert_pkln_to_pkgauss(Pk_r, reso_x, reso_y, reso_z):
 
 
 #==================================================
+# Decompose an image into periodic + smooth
+#==================================================
+
+def periodic_smooth_decomp(I):
+    """
+    Decompose the image into a periodic plus smooth 
+    component. This is based on:
+    Periodic Plus Smooth Image Decomposition
+    Moisan, L. J Math Imaging Vis (2011) 39: 161.
+    doi.org/10.1007/s10851-010-0227-1
+    Original code from https://github.com/jacobkimmel/ps_decomp/blob/master/psd.py
+    
+    Parameters
+    ----------
+    - I (np array): 2d data image
+
+    Outputs
+    ----------
+    - p (np array): periodic component of the image
+    - s_f (np array): smooth component
+    """
+    # Get the image zeroed expect for the outermost rows and cols
+    def u2v(u):
+        v = np.zeros(u.shape, dtype=np.float64)
+        v[0, :] = np.subtract(u[-1, :], u[0,  :], dtype=np.float64)
+        v[-1,:] = np.subtract(u[0,  :], u[-1, :], dtype=np.float64)
+        v[:,  0] += np.subtract(u[:, -1], u[:,  0], dtype=np.float64)
+        v[:, -1] += np.subtract(u[:,  0], u[:, -1], dtype=np.float64)
+        return v
+    # Computes the maximally smooth component
+    def v2s(v_hat):
+        M, N = v_hat.shape
+        q = np.arange(M).reshape(M, 1).astype(v_hat.dtype)
+        r = np.arange(N).reshape(1, N).astype(v_hat.dtype)
+        den = (2*np.cos( np.divide((2*np.pi*q), M) ) \
+             + 2*np.cos( np.divide((2*np.pi*r), N) ) - 4)
+        s = np.divide(v_hat, den, out=np.zeros_like(v_hat), where=den!=0)
+        s[0, 0] = 0
+        return s
+    
+    u = I.astype(np.float64)
+    v = u2v(u)
+    v_fft = np.fft.fftn(v)
+    s = v2s(v_fft)
+    s_i = np.fft.ifftn(s)
+    s_f = np.real(s_i)
+    p = u - s_f
+    return p, s_f
+
+
+#==================================================
 # Measure the 3D power spectrum naively
 #==================================================
 
