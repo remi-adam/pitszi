@@ -97,6 +97,7 @@ def beam_wf_pk(k, FWHM):
 #==================================================
 # Apply NIKA-like transfer function
 #==================================================
+
 def apply_transfer_function(image, reso, beamFWHM, TF, apps_TF_LS=True, apps_beam=True):
     """
     Convolve SZ image with instrumental transfer function, decomposed in two: beam and processing.
