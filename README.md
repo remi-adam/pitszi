@@ -67,7 +67,7 @@ Adam et al. (2025)
 
 #### History
 - Version 0.1.0 --> Initial upload
-- Version 0.2.0 --> Second upload
+- Version 0.2.0 --> Second upload (includes pseudo density, temperature and thermodynamical profiles in the model)
 - Version 0.3.0 --> Third upload (includes new power spectrum tools and small updates of several functions)
 
 
