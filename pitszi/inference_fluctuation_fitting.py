@@ -77,6 +77,13 @@ class InferenceFluctuationFitting(object):
             if len(truth) != Nparam:
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
+        #---------- Add log if needed
+        parlist_stat = []
+        for ipar in range(Nparam):
+            parlist_stat.append(parlist[ipar])
+            if 'sampling' in parinfo[parlist[ipar]]:
+                if parinfo[parlist[ipar]]['sampling']: parlist_stat[ipar]= 'log '+parlist_stat[ipar]
+                    
         #---------- Remove the burnin
         if self.mcmc_burnin <= Nsample:
             par_chains = sampler.chain[:,self.mcmc_burnin:,:]
@@ -89,29 +96,24 @@ class InferenceFluctuationFitting(object):
             
         #---------- Compute statistics for the chains
         utils_fitting.chains_statistics(par_chains, lnl_chains,
-                                        parname=parlist,
+                                        parname=parlist_stat,
                                         conf=conf,
                                         outfile=self.output_dir+'/MCMC'+extname+'_chain_statistics.txt')
 
         #---------- Produce 1D plots of the chains
-        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/MCMC'+extname+'_chain_1d_plot.pdf')
+        utils_plot.chains_1Dplots(par_chains, parlist_stat, self.output_dir+'/MCMC'+extname+'_chain_1d_plot.pdf')
         
         #---------- Produce 1D histogram of the chains
         namefiles = [self.output_dir+'/MCMC'+extname+'_chain_hist_'+i+'.pdf' for i in parlist]
-        utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
+        utils_plot.chains_1Dhist(par_chains, parlist_stat, namefiles,
                                  conf=conf, truth=truth)
 
         #---------- Produce 2D (corner) plots of the chains
         utils_plot.chains_2Dplots_corner(par_chains,
-                                         parlist,
+                                         parlist_stat,
                                          self.output_dir+'/MCMC'+extname+'_chain_2d_plot_corner.pdf',
                                          truth=truth)
 
-        #utils_plot.chuains_2Dplots_sns(par_chains,
-        #                              parlist,
-        #                              self.output_dir+'/MCMC'+extname+'_chain_2d_plot_sns.pdf',
-        #                              truth=truth)
-    
 
     #==================================================
     # Compute results for a given curvefit
@@ -146,19 +148,26 @@ class InferenceFluctuationFitting(object):
 
         Nparam = len(parlist)
         Nchains = 1
-        
+
         #---------- Check the truth
         if truth is not None:
             if len(truth) != Nparam:
                 raise ValueError("The 'truth' keyword should match the number of parameters")
 
+        #---------- Add log if needed
+        parlist_stat = []
+        for ipar in range(Nparam):
+            parlist_stat.append(parlist[ipar])
+            if 'sampling' in parinfo[parlist[ipar]]:
+                if parinfo[parlist[ipar]]['sampling']: parlist_stat[ipar]= 'log '+parlist_stat[ipar]
+                    
         #---------- Output best fit and errors
         print('----- Parameter best-fit: -----')
         file = open(self.output_dir+'/CurveFit'+extname+'_statistics_main.txt','w')
         for ipar in range(Nparam):
             bfval = str(popt[ipar])+' +/- '+str(pcov[ipar,ipar]**0.5)
-            print('     param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval)
-            file.write('param '+str(ipar)+' ('+parlist[ipar]+') = '+bfval+'\n')
+            print('     param '+str(ipar)+' ('+parlist_stat[ipar]+') = '+bfval)
+            file.write('param '+str(ipar)+' ('+parlist_stat[ipar]+') = '+bfval+'\n')
         file.close() 
         
         #---------- Mimic MCMC chains with multivariate Gaussian
@@ -190,32 +199,27 @@ class InferenceFluctuationFitting(object):
             lnl_chains[i] = -0.5 * np.matmul((par_chains[i,:]-popt), np.matmul(pcov, (par_chains[i,:]-popt)))
         par_chains = par_chains[np.newaxis]
         lnl_chains = lnl_chains[np.newaxis]
-            
+
         #---------- Compute statistics for the parameters
         utils_fitting.chains_statistics(par_chains, lnl_chains,
-                                        parname=parlist,
+                                        parname=parlist_stat,
                                         conf=conf,
                                         outfile=self.output_dir+'/CurveFit'+extname+'_statistics.txt')
             
         #---------- Produce 1D plots of the chains
-        utils_plot.chains_1Dplots(par_chains, parlist, self.output_dir+'/CurveFit'+extname+'_1d_plot.pdf')
+        utils_plot.chains_1Dplots(par_chains, parlist_stat, self.output_dir+'/CurveFit'+extname+'_1d_plot.pdf')
         
         #---------- Produce 1D histogram of the chains
         namefiles = [self.output_dir+'/CurveFit'+extname+'_hist_'+i+'.pdf' for i in parlist]
-        utils_plot.chains_1Dhist(par_chains, parlist, namefiles,
+        utils_plot.chains_1Dhist(par_chains, parlist_stat, namefiles,
                                  conf=conf, truth=truth)
 
         #---------- Produce 2D (corner) plots of the chains
         utils_plot.chains_2Dplots_corner(par_chains,
-                                         parlist,
+                                         parlist_stat,
                                          self.output_dir+'/CurveFit'+extname+'_2d_plot_corner.pdf',
                                          truth=truth)
 
-        #utils_plot.chains_2Dplots_sns(par_chains,
-        #                              parlist,
-        #                              self.output_dir+'/CurveFit'+extname+'_2d_plot_sns.pdf',
-        #                              truth=truth)
-    
         
     #==================================================
     # Fluctuation parameter definition
