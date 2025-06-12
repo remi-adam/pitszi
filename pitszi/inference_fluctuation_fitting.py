@@ -47,11 +47,12 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def get_mcmc_chains_outputs_results(self,
-                                       parlist,
-                                       sampler,
-                                       conf=68.0,
-                                       truth=None,
-                                       extname=''):
+                                        parlist,
+                                        parinfo,
+                                        sampler,
+                                        conf=68.0,
+                                        truth=None,
+                                        extname=''):
         """
         This function can be used to produce automated plots/files
         that give the results of the MCMC samping
@@ -796,7 +797,7 @@ class InferenceFluctuationFitting(object):
         
         #========== Show results
         if show_fit_result:
-            self.get_mcmc_chains_outputs_results(par_list, sampler,
+            self.get_mcmc_chains_outputs_results(par_list, parinfo, sampler,
                                                  truth=true_param,
                                                  extname=extname)
             self.run_mcmc_fluctuation_results(sampler, parinfo,
