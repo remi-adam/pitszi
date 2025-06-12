@@ -512,8 +512,17 @@ class InferenceFluctuationFitting(object):
             if parinfo_fluct['User']['unit'] is not None:
                 unit = parinfo_fluct['User']['unit']
             else:
-                    unit = 1                
-            self.model.model_pressure_fluctuation['pk'] = np.array(pkvec) * unit
+                unit = 1
+
+            if 'sampling' in parinfo_fluct['User']:
+                if parinfo_fluct['User']['sampling'] == 'log':
+                    self.model.model_pressure_fluctuation['pk'] = 10**(np.array(pkvec)) * unit
+                elif parinfo_fluct['User']['sampling'] == 'lin':
+                    self.model.model_pressure_fluctuation['pk'] = np.array(pkvec) * unit
+                else:
+                    raise ValueError('Only lin or log sampling are possible')
+            else:
+                self.model.model_pressure_fluctuation['pk'] = np.array(pkvec) * unit
 
         else:
         # Loop Fluctuation
@@ -523,15 +532,39 @@ class InferenceFluctuationFitting(object):
                     unit = parinfo_fluct[parkey]['unit']
                 else:
                     unit = 1
-                self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
+                if 'sampling' in parinfo_fluct[parkey]:
+                    if parinfo_fluct[parkey]['sampling'] == 'log':
+                        self.model.model_pressure_fluctuation[parkey] = 10**param[idx_par] * unit
+                    elif parinfo_fluct[parkey]['sampling'] == 'lin':
+                        self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
+                    else:
+                        raise ValueError('Only lin or log sampling are possible')
+                else:    
+                    self.model.model_pressure_fluctuation[parkey] = param[idx_par] * unit
                 idx_par += 1
 
         #========== Noise and background amplitude
         if 'Anoise' in parkeys:
-            self.nuisance_Anoise = param[idx_par]
+            if 'sampling' in parinfo['Anoise']:
+                if parinfo['Anoise']['sampling'] == 'log':
+                    self.nuisance_Anoise = 10**param[idx_par]
+                elif parinfo['Anoise']['sampling'] == 'lin':
+                    self.nuisance_Anoise = param[idx_par]
+                else:
+                    raise ValueError('Only lin or log sampling are possible')
+            else:
+                self.nuisance_Anoise = param[idx_par]
             idx_par += 1
         if 'Abkg' in parkeys:
-            self.nuisance_Abkg = param[idx_par]
+            if 'sampling' in parinfo['Abkg']:
+                if parinfo['Abkg']['sampling'] == 'log':
+                    self.nuisance_Abkg = 10**param[idx_par]
+                elif parinfo['AnAbkgise']['sampling'] == 'lin':
+                    self.nuisance_Abkg = param[idx_par]
+                else:
+                    raise ValueError('Only lin or log sampling are possible')
+            else:
+                self.nuisance_Abkg = param[idx_par]
             idx_par += 1
 
         #========== Final check on parameter count
@@ -626,6 +659,7 @@ class InferenceFluctuationFitting(object):
                          'unit': None,              # --> unit (mandatory, None if unitless)
                          'limit':[0, np.inf],       # --> Allowed range, i.e. flat prior (optional)
                          'prior':[0.5, 0.1],        # --> Gaussian prior: mean, sigma (optional)
+                         'sampling':'log',          # --> sampling of the parameter (log or lin). If log, guess/lim/prior should be in log
                         },
                         'slope':
                         {'limit':[-11/3-1, -11/3+1], 
@@ -920,6 +954,7 @@ class InferenceFluctuationFitting(object):
                          'unit': None,              # --> unit (mandatory, None if unitless)
                          'limit':[0, np.inf],       # --> Allowed range, i.e. flat prior (optional)
                          'prior':[0.5, 0.1],        # --> Gaussian prior: mean, sigma (optional)
+                         'sampling':'log',          # --> sampling of the parameter (log or lin). Default is lin.
                         },
                         'slope':
                         {'limit':[-11/3-1, -11/3+1], 
