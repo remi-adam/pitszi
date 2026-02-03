@@ -10,6 +10,7 @@ from scipy.ndimage import gaussian_filter, fourier_gaussian
 import scipy.stats as stats
 from scipy.special import gamma
 import astropy.units as u
+from sklearn.neighbors import NearestNeighbors
 
 
 #==================================================
@@ -988,4 +989,72 @@ def extract_pk2d_arevalo(image, proj_reso,
     return k2d, Pk
 
 
+#==================================================
+# Increase the number of Pk in a sample
+#==================================================
 
+def pk_data_augmentation(k, pks,
+                         Nsim=10000,
+                         method='LogNormCov',
+                         n_nearest=10):
+    """
+    Starting from a set of spectra, this code perform data augmentation
+    using different methods.
+    (Developed by A. Zarka)
+    
+    Parameters
+    ----------
+    - k (np array): 1d array
+    - pks (np array): 2d array of shape (Nspec, Nkbins)
+    - Nsim (int): the number of new spectra to be generated
+    - method (str): 1) 'LogNormCov' for log-norm P(k) distributions
+                     plus covariance between bins
+                    2) 'NearNeighborsItpl' for the nearest
+                     neighbors interpolation
+    - n_nearest (int): number of nearest neighbors for each point
+    
+    Outputs
+    ----------
+    - Pknew (np array): 2d array of shape (Nsim, Nkbins)
+    """
+
+    # Define the new Pk
+    Pknew = np.zeros((Nsim, len(k)))
+
+    # In the case of log normal assumption + bin-to-bin covariance
+    if method == 'LogNormCov':
+        log_list = np.log(cib_pk2d)               # log of the spectra
+        mu_log   = np.mean(log_list, axis=0)      # mean of the spectra
+        cov_log  = np.cov(log_list, rowvar=False) # Covariance matrix
+
+        for i in range (Nsim):
+            sample_log = np.random.multivariate_normal(mu_log, cov_log)
+            Pknew[i,:] = np.exp(sample_log)
+
+    # In the case of nearest neighbors interpolation
+    elif method == "NearNeighborsItpl":
+        # Find the k nearest neighbors for each point
+        nn = NearestNeighbors(n_neighbors=n_nearest+1).fit(pks)  # k+1 to include the point itself
+        distances, indices = nn.kneighbors(pks)
+
+        for j, sample in enumerate(pks):
+            for i in range (Nsim):
+
+                # Select a neighbor randomly from the k nearest ones
+                neighbor_idx = np.random.choice(indices[j][1:])  # indices[1:] to exclude the point itself
+                neighbor = pks[neighbor_idx]
+            
+                # Generate an interpolation coefficient between 0 and 1
+                alpha = np.random.uniform(0, 1)
+
+                # Compute interpolated point
+                new_sample = sample + alpha * (neighbor - sample)  # Linear interpolation
+
+                # Fill the Pk
+                Pknew[i,:] = new_sample
+                
+    # No other solution so far
+    else:
+        raise ValueError('Only "LogNormCov" and "" methods are available.')
+
+    return Pknew
