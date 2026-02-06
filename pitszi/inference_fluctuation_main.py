@@ -306,11 +306,14 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self._pk2d_noise_rms     = None  # noise power spectrum rms
         self._pk2d_noise_cov     = None  # noise power spectrum covariance matrix
         self._pk2d_noise_invcov  = None  # noise power spectrum inverse covariance matrix
+        self._pk2d_noise_mc      = None  # noise power spectrum MC realization
         self._pk2d_modref        = None  # reference model power spectrum mean
         self._pk2d_modref_rms    = None  # reference model power spectrum rms
+        self._pk2d_modref_mc     = None  # reference model power spectrum MC realization
         self._pk2d_bkg           = None  # extra background power spectrum mean 
         self._pk2d_bkg_rms       = None  # extra background power spectrum rms
         self._pk2d_bkg_cov       = None  # extra background power spectrum covariance matrix
+        self._pk2d_bkg_mc        = None  # extra background power spectrum MC realizations
         self._pk2d_totref_invcov = None  # noise plus reference model power spectrum covariance matrix
 
         self._conv_wf            = None  # window function to go from 2D to 3D power spectrum
@@ -537,27 +540,31 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         #---------- Pk
         if not self.silent: print('    * Setup Pk data, ref model and noise')
 
-        _, noise_mean, noise_cov = self.get_pk2d_noise_statistics(physical=True, Nmc=Nmc)
-        _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
+        _, noise_mean, noise_cov, noisepk_mc = self.get_pk2d_noise_statistics(physical=True, Nmc=Nmc)
+        _, model_mean, model_cov, modelpk_mc = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
 
         self._pk2d_data          = self.get_pk2d_data(physical=True)[1].to_value('kpc2')
         self._pk2d_noise         = noise_mean.to_value('kpc2')
         self._pk2d_noise_rms     = np.diag(noise_cov.to_value('kpc4'))**0.5
         self._pk2d_noise_cov     = noise_cov.to_value('kpc4')
+        self._pk2d_noise_mc      = noisepk_mc.to_value('kpc2')
         
         self._pk2d_modref        = model_mean.to_value('kpc2')
         self._pk2d_modref_rms    = np.diag(model_cov.to_value('kpc4'))**0.5
         self._pk2d_modref_cov    = model_cov.to_value('kpc4')
+        self._pk2d_modref_mc     = modelpk_mc.to_value('kpc2')
 
         if self.nuisance_bkg_mc1 is not None:
             _, bkg_mean, bkg_cov, bkg_mc = self.get_pk2d_bkg_statistics(physical=True)
             self._pk2d_bkg               = bkg_mean.to_value('kpc2')
             self._pk2d_bkg_rms           = np.diag(bkg_cov.to_value('kpc4'))**0.5
             self._pk2d_bkg_cov           = bkg_cov.to_value('kpc4')
+            self._pk2d_bkg_mc            = bkg_mc.to_value('kpc2')
         else:
             self._pk2d_bkg        = 0 * self._pk2d_data
             self._pk2d_bkg_rms    = 0 * self._pk2d_data
             self._pk2d_bkg_cov    = 0 * self._pk2d_noise_cov
+            self._pk2d_bkg_mc     = 0 * self._pk2d_data
         
         #---------- Convertion
         if not self.silent: print('    * Setup window function conversion')
@@ -608,11 +615,12 @@ class InferenceFluctuation(InferenceFluctuationFitting):
                 print('      Run pk_setup() before you can update the model Pk via pk_setup_fluctuation_model().')
         
         #---------- Pk update
-        _, model_mean, model_cov = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
+        _, model_mean, model_cov, model_mc = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
         
         self._pk2d_modref        = model_mean.to_value('kpc2')
         self._pk2d_modref_rms    = np.diag(model_cov.to_value('kpc4'))**0.5
         self._pk2d_modref_cov    = model_cov.to_value('kpc4')
+        self._pk2d_modref_mc     = model_mc.to_value('kpc2')
         
         
     #==================================================
@@ -1053,16 +1061,18 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             k2d               = k2d * kpc2arcsec**1 * u.kpc**-1
             noise_pk2d_mean   = noise_pk2d_mean * kpc2arcsec**-2 * u.kpc**2
             noise_pk2d_covmat = noise_pk2d_covmat * kpc2arcsec**-4 * u.kpc**4
+            noise_pk2d_mc     = noise_pk2d_mc * kpc2arcsec**-2 * u.kpc**2
         else:
             k2d               = k2d * u.arcsec**-1
             noise_pk2d_mean   = noise_pk2d_mean * u.arcsec**2
             noise_pk2d_covmat = noise_pk2d_covmat * u.arcsec**4
+            noise_pk2d_mc     = noise_pk2d_mc * u.arcsec**2
 
         #---------- return
         if apply_nuisance:
-            return k2d, self.nuisance_Anoise * noise_pk2d_mean, self.nuisance_Anoise**2 * noise_pk2d_covmat
+            return k2d, self.nuisance_Anoise * noise_pk2d_mean, self.nuisance_Anoise**2 * noise_pk2d_covmat, self.nuisance_Anoise * noise_pk2d_mc
         else:
-            return k2d, noise_pk2d_mean, noise_pk2d_covmat
+            return k2d, noise_pk2d_mean, noise_pk2d_covmat, noise_pk2d_mc
 
         
     #==================================================
@@ -1157,13 +1167,15 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             k2d               = k2d * kpc2arcsec**1 * u.kpc**-1
             model_pk2d_mean   = model_pk2d_mean * kpc2arcsec**-2 * u.kpc**2
             model_pk2d_covmat = model_pk2d_covmat * kpc2arcsec**-4 * u.kpc**4
+            model_pk2d_mc     = model_pk2d_mc * kpc2arcsec**-2 * u.kpc**2
         else:
             k2d               = k2d * u.arcsec**-1
             model_pk2d_mean   = model_pk2d_mean * u.arcsec**2
             model_pk2d_covmat = model_pk2d_covmat * u.arcsec**4
+            model_pk2d_mc     = model_pk2d_mc * u.arcsec**2
 
         #---------- return
-        return k2d, model_pk2d_mean, model_pk2d_covmat
+        return k2d, model_pk2d_mean, model_pk2d_covmat, model_pk2d_mc
 
 
     #==================================================
@@ -1316,7 +1328,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             raise ValueError('This function requieres do run the setup first')
         
         #----- Compute the Pk for the cluster
-        k2d, pk2d_modvar, _ = self.get_pk2d_model_statistics(physical=physical, Nmc=1)
+        k2d, pk2d_modvar, _, _= self.get_pk2d_model_statistics(physical=physical, Nmc=1)
 
         #----- Compute the final model
         pk_noise = self._pk2d_noise # baseline is kpc2

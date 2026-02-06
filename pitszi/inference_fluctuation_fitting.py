@@ -853,8 +853,8 @@ class InferenceFluctuationFitting(object):
         best_par = utils_fitting.get_emcee_bestfit_param(sampler, self.mcmc_burnin)
         self.setpar_fluctuation(best_par, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
-                                                                                Nmc=self.mcmc_Nresamp)
+        k2d, model_pk2d_ref, model_pk2d_covmat, _ = self.get_pk2d_model_statistics(physical=True,
+                                                                                   Nmc=self.mcmc_Nresamp)
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
         best_pk2d_bkg   = self.nuisance_Abkg   * self._pk2d_bkg
 
@@ -1106,8 +1106,8 @@ class InferenceFluctuationFitting(object):
         #========== Get the best-fit
         self.setpar_fluctuation(popt, parinfo)
         k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
-        k2d, model_pk2d_ref, model_pk2d_covmat = self.get_pk2d_model_statistics(physical=True,
-                                                                                Nmc=self.mcmc_Nresamp)
+        k2d, model_pk2d_ref, model_pk2d_covmat, _ = self.get_pk2d_model_statistics(physical=True,
+                                                                                   Nmc=self.mcmc_Nresamp)
         best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
         best_pk2d_bkg   = self.nuisance_Abkg   * self._pk2d_bkg
 
