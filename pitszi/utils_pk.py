@@ -1023,7 +1023,7 @@ def pk_data_augmentation(k, pks,
 
     # In the case of log normal assumption + bin-to-bin covariance
     if method == 'LogNormCov':
-        log_list = np.log(cib_pk2d)               # log of the spectra
+        log_list = np.log(pks)               # log of the spectra
         mu_log   = np.mean(log_list, axis=0)      # mean of the spectra
         cov_log  = np.cov(log_list, rowvar=False) # Covariance matrix
 
