@@ -538,7 +538,7 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             print('      - Minimal count in k bins:', np.amin(self._kcount))
 
         #---------- Pk
-        if not self.silent: print('    * Setup Pk data, ref model and noise')
+        if not self.silent: print('    * Setup Pk data, ref model, noise and background')
 
         _, noise_mean, noise_cov, noisepk_mc = self.get_pk2d_noise_statistics(physical=True, Nmc=Nmc)
         _, model_mean, model_cov, modelpk_mc = self.get_pk2d_model_statistics(physical=True, Nmc=Nmc)
