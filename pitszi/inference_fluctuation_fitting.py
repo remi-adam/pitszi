@@ -232,7 +232,7 @@ class InferenceFluctuationFitting(object):
         ranges for the fluctuation fitting.
         We distinguish two kind of parameters:
         - fluctuation parameters
-        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+        - noise and CIB parameters (amplitude)
             
         Parameters
         ----------
@@ -291,6 +291,7 @@ class InferenceFluctuationFitting(object):
                 else:
                     par_min.append(-np.inf)
                     par_max.append(+np.inf)
+                    print('   !!! WARNING (case of SBI): requires limits on parameters')
                     
         else:
         # Loop over the keys
@@ -324,6 +325,7 @@ class InferenceFluctuationFitting(object):
                 else:
                     par_min.append(-np.inf)
                     par_max.append(+np.inf)
+                    print('   !!! WARNING (case of SBI): requires limits on parameters')
 
         #========== Noise ampli
         list_nuisance_allowed = ['Anoise', 'Abkg']
@@ -354,7 +356,8 @@ class InferenceFluctuationFitting(object):
             else:
                 par_min.append(-np.inf)
                 par_max.append(+np.inf)
-    
+                print('   !!! WARNING (case of SBI): requires limits on parameters')
+
         #========== Make it an np array
         par_list   = np.array(par_list)
         par0_value = np.array(par0_value)
@@ -375,7 +378,7 @@ class InferenceFluctuationFitting(object):
         about the parameters given by the user
         We distinguish two kind of parameters:
         - fluctuation parameters
-        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+        - noise and CIB parameters (amplitude)
             
          Parameters
          ----------
@@ -483,7 +486,7 @@ class InferenceFluctuationFitting(object):
         Set the model to the given fluctuation parameters
         We distinguish two kind of parameters:
         - fluctuation parameters
-        - noise parameters (noise amplitude only for now, but CMB, CIB could be added)
+        - noise and CIB parameters (amplitude)
             
         Parameters
         ----------
@@ -583,9 +586,7 @@ class InferenceFluctuationFitting(object):
     # lnL function for the fluctuation fit
     #==================================================
     
-    def lnlike_fluctuation(self, param, parinfo,
-                           error_stat,
-                           kind='projection',):
+    def lnlike_fluctuation(self, param, parinfo, error_stat):
         """
         This is the likelihood function used for the fit of the fluctuation.
             
@@ -595,8 +596,6 @@ class InferenceFluctuationFitting(object):
         - parinfo (dict): see parinfo in mcmc_fluctuation
         - error_stat (np.array): the error statistics, either the Pk rms or the
         inverse covariance matrix depending if self.method_use_covmat is True or False
-        - kind (str): projection or brute, for using 
-        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
 
         Outputs
         ----------
@@ -612,12 +611,7 @@ class InferenceFluctuationFitting(object):
         self.setpar_fluctuation(param, parinfo)
         
         #========== Get the model
-        if kind == 'brute':
-            pk2d_test = self.get_pk2d_model_brute(physical=True)[1].to_value('kpc2')
-        elif kind == 'projection':
-            pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
-        else:
-            raise ValueError('lnlike_fluctuation only accepts kind="brute" or kind="projection".')
+        pk2d_test = self.get_pk2d_model_proj(physical=True)[1].to_value('kpc2')
             
         #========== Compute the likelihood
         # collect products
@@ -643,7 +637,6 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def run_mcmc_fluctuation(self, parinfo,
-                             kind='projection',
                              include_model_error=False,
                              filename_sampler=None,
                              show_fit_result=False,
@@ -677,8 +670,6 @@ class InferenceFluctuationFitting(object):
                        }  
         Other accepted parameters: 'Anoise'
 
-        - kind (str): projection or brute, for using 
-        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
         - include_model_error (bool): set to true to include intrinsic model uncertainty
         assuming the reference model
         - filename_sampler (str): the file name of the sampler to use.
@@ -705,9 +696,6 @@ class InferenceFluctuationFitting(object):
             print('      The setup was not done.')
             print('      Run pk_setup() with the correct analysis framework before proceeding.')
 
-        if kind == 'brute' and include_model_error == False:
-            print('      WARNING: brute method is dangerous without including model uncertainties .')
-            
         #========== Copy the input model
         input_model = copy.deepcopy(self.model)
         
@@ -761,8 +749,7 @@ class InferenceFluctuationFitting(object):
                                                      self.mcmc_reset, self.mcmc_nwalkers, ndim, silent=False)
 
         # Moves
-        if kind == 'projection': moves = emcee.moves.StretchMove(a=2.0)
-        if kind == 'brute':      moves = emcee.moves.KDEMove()
+        moves = emcee.moves.StretchMove(a=2.0)
 
         # Error statistics to pass
         if self._cross_spec:
@@ -782,7 +769,7 @@ class InferenceFluctuationFitting(object):
         # sampler
         sampler = emcee.EnsembleSampler(self.mcmc_nwalkers, ndim,
                                         self.lnlike_fluctuation, 
-                                        args=[parinfo, error_stat, kind], 
+                                        args=[parinfo, error_stat], 
                                         pool=mypool,
                                         moves=moves,
                                         backend=backend)
@@ -938,7 +925,6 @@ class InferenceFluctuationFitting(object):
     #==================================================
     
     def run_curvefit_fluctuation(self, parinfo,
-                                 kind='projection',
                                  include_model_error=False,
                                  show_fit_result=False,
                                  extname='_Fluctuation',
@@ -980,8 +966,6 @@ class InferenceFluctuationFitting(object):
                        }  
         Other accepted parameters: 'Anoise'
 
-        - kind (str): projection or brute, for using 
-        get_pk2d_model_proj or get_pk2d_model_brute to compute the model
         - include_model_error (bool): set to true to include intrinsic model uncertainty
         assuming the reference model
         - show_fit_result (bool): set to true to produce plots for fitting results
@@ -1008,10 +992,6 @@ class InferenceFluctuationFitting(object):
             print('      The setup was not done.')
             print('      Run pk_setup() with the correct analysis framework before proceeding.')
 
-        #========== Check the kind of analysis
-        if kind != 'projection':
-            raise ValueError('Only "projection" method is suported with curvefit')
-        
         #========== Copy the input model
         input_model = copy.deepcopy(self.model)
         

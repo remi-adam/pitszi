@@ -23,13 +23,14 @@ from pitszi import utils_pk
 from pitszi import title
 
 from pitszi.inference_fluctuation_fitting import InferenceFluctuationFitting
+from pitszi.inference_fluctuation_sbi     import InferenceFluctuationSBI
 
 
 #==================================================
 # Inference class
 #==================================================
 
-class InferenceFluctuation(InferenceFluctuationFitting):
+class InferenceFluctuation(InferenceFluctuationFitting,InferenceFluctuationSBI):
     """ Inference class
         This class infer the pressure fluctuation power spectrum properties 
         given input data (from class Data()) and model (from class Model())
@@ -147,6 +148,11 @@ class InferenceFluctuation(InferenceFluctuationFitting):
                  mcmc_run=True,
                  mcmc_Nresamp=100,
                  #
+                 sbi_nsteps=500,
+                 sbi_reset=False,
+                 sbi_run=True,
+                 sbi_Nresamp=100,
+                 #
                  silent=False,
                  output_dir='./pitszi_output',
     ):
@@ -207,6 +213,11 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         - mcmc_run (bool): True to run the MCMC
         - mcmc_Nresamp (int): the number of Monte Carlo to resample the chains for results
 
+        - sbi_nsteps (int): number of SBI training sim to run
+        - sbi_reset (bool): True for restarting the SBI even if a training set exists
+        - sbi_run (bool): True to run the SBI training
+        - sbi_Nresamp (int): the number of Monte Carlo to resample the chains for results
+        
         - silent (bool): set to False for printing information
         - output_dir (str): directory where outputs are saved
         
@@ -270,10 +281,10 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         self.mcmc_Nresamp  = mcmc_Nresamp
 
         #----- SBI parameters
-        #self.sbi_xxx = xxx
-        #self.sbi_xxx = xxx
-        #self.sbi_xxx = xxx
-        #self.sbi_xxx = xxx
+        self.sbi_nsteps   = sbi_nsteps
+        self.sbi_reset    = sbi_reset
+        self.sbi_run      = sbi_run
+        self.sbi_Nresamp  = sbi_Nresamp
 
         #----- Admin
         self.silent     = silent
@@ -561,10 +572,10 @@ class InferenceFluctuation(InferenceFluctuationFitting):
             self._pk2d_bkg_cov           = bkg_cov.to_value('kpc4')
             self._pk2d_bkg_mc            = bkg_mc.to_value('kpc2')
         else:
-            self._pk2d_bkg        = 0 * self._pk2d_data
-            self._pk2d_bkg_rms    = 0 * self._pk2d_data
+            self._pk2d_bkg        = 0 * self._pk2d_noise
+            self._pk2d_bkg_rms    = 0 * self._pk2d_noise_rms
             self._pk2d_bkg_cov    = 0 * self._pk2d_noise_cov
-            self._pk2d_bkg_mc     = 0 * self._pk2d_data
+            self._pk2d_bkg_mc     = 0 * self._pk2d_noise_mc
         
         #---------- Convertion
         if not self.silent: print('    * Setup window function conversion')
@@ -1307,7 +1318,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     #==================================================
     
     def get_pk2d_model_brute(self,
-                             physical=False):
+                             physical=False,
+                             include_noise=True,
+                             include_bkg=True):
         """
         This function returns the model of pk for the brute force
         approach. This is the same as what is done to get the model variance properties.
@@ -1315,7 +1328,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         Parameters
         ----------
         - physical (bool): set to true to have output in kpc units, else arcsec units
-
+        - include_noise (bool): add the noise contribution
+        - include_bkg (bool): add the bakground contribution
+        
         Outputs
         ----------
         - k2d (1d np array): the k bin center
@@ -1330,18 +1345,28 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         #----- Compute the Pk for the cluster
         k2d, pk2d_modvar, _, _= self.get_pk2d_model_statistics(physical=physical, Nmc=1)
 
-        #----- Compute the final model
-        pk_noise = self._pk2d_noise # baseline is kpc2
-        pk_bkg   = self._pk2d_bkg     # baseline is kpc2
+        #----- Unit conversion
         if physical:
-            pk_noise = pk_noise * u.kpc**2
-            pk_bkg   = pk_bkg   * u.kpc**2
+            coeff_unit = u.kpc**2
         else:
-            pk_noise = pk_noise * self._kpc2arcsec**2 * u.arcsec**2
-            pk_bkg = pk_bkg     * self._kpc2arcsec**2 * u.arcsec**2
+            coeff_unit = self._kpc2arcsec**2 * u.arcsec**2
+            
+        #----- Get pk realization of noise and background
+        if include_noise:
+            pk_noise = utils_pk.pk_data_augmentation(k2d, self._pk2d_noise_mc, Nsim=1, method='LogNormCov')[0] # baseline is kpc2
+            pk_noise = self.nuisance_Anoise * pk_noise * coeff_unit
+        else:
+            pk_noise = 0
 
-        pk2d_tot = pk2d_modvar + self.nuisance_Anoise * pk_noise + self.nuisance_Abkg * pk_bkg
+        if include_bkg and self.nuisance_bkg_mc1 is not None:
+            pk_bkg   = utils_pk.pk_data_augmentation(k2d, self._pk2d_bkg_mc,   Nsim=1, method='LogNormCov')[0] # baseline is kpc2
+            pk_bkg   = self.nuisance_Abkg * pk_bkg * coeff_unit
+        else:
+            pk_bkg = 0
 
+        #----- Total model
+        pk2d_tot = pk2d_modvar + pk_noise +  pk_bkg
+        
         return k2d, pk2d_tot
     
     
@@ -1350,7 +1375,9 @@ class InferenceFluctuation(InferenceFluctuationFitting):
     #==================================================
     
     def get_pk2d_model_proj(self,
-                            physical=False):
+                            physical=False,
+                            include_noise=True,
+                            include_bkg=True):
         """
         This function returns the model of pk for the 
         model projection approach
@@ -1358,6 +1385,8 @@ class InferenceFluctuation(InferenceFluctuationFitting):
         Parameters
         ----------
         - physical (bool): set to true to have output in kpc units, else arcsec units
+        - include_noise (bool): add the noise contribution
+        - include_bkg (bool): add the bakground contribution
 
         Outputs
         ----------
@@ -1416,16 +1445,18 @@ class InferenceFluctuation(InferenceFluctuationFitting):
 
         #----- Compute the final model
         pk_noise = self._pk2d_noise # baseline is kpc2
-        pk_bkg   = self._pk2d_bkg     # baseline is kpc2
+        pk_bkg   = self._pk2d_bkg   # baseline is kpc2
         if physical:
             pk_noise = pk_noise * u.kpc**2
             pk_bkg   = pk_bkg   * u.kpc**2
         else:
             pk_noise = pk_noise * self._kpc2arcsec**2 * u.arcsec**2
             pk_bkg   = pk_bkg   * self._kpc2arcsec**2 * u.arcsec**2
+
+        pk2d_tot = pk2d_mod * 1
+        if include_noise: pk2d_tot += self.nuisance_Anoise * pk_noise
+        if include_bkg:   pk2d_tot += self.nuisance_Abkg   * pk_bkg
                     
-        pk2d_tot = pk2d_mod + self.nuisance_Anoise * pk_noise + self.nuisance_Abkg * pk_bkg
-        
         return k2d, pk2d_tot
     
             
