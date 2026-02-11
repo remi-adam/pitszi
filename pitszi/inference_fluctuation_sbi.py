@@ -96,7 +96,11 @@ class InferenceFluctuationSBI(object):
     
     def run_sbi_fluctuation(self, parinfo,
                             filename_training=None,
-                            extname='_Fluctuation'):
+                            show_fit_result=False,
+                            set_bestfit=False,
+                            extname='_Fluctuation',
+                            true_pk3d=None,
+                            true_param=None):
         """
         This function train the neural network
         
@@ -123,8 +127,13 @@ class InferenceFluctuationSBI(object):
         Other accepted parameters: 'Anoise'
 
         - filename_training (str): the file name of the training set to use.
+        - show_fit_result (bool): set to true to produce plots for fitting results
         - extname (string): extra name to add after MCMC results file names
-        
+        - set_bestfit (bool): set the best fit to the model
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        - true_param (list): the list of expected parameter value for the fit
+       
         Outputs
         ----------
         - parlist (list): the list of the fit parameters
@@ -204,5 +213,22 @@ class InferenceFluctuationSBI(object):
         #========== Apply the SBI fit
         observable = self.get_pk2d_data(physical=True)[1]
         samples = posterior.sample((self.sbi_Nresamp,), x=observable).numpy()
+
+        #========== Show results
+        if show_fit_result:
+            self.get_sbi_chains_outputs_results(par_list, parinfo, sampler,
+                                                truth=true_param,
+                                                extname=extname)
+            self.run_sbi_fluctuation_results(sampler, parinfo,
+                                             true_pk3d=true_pk3d,
+                                             extname=extname)
+        
+        #========== Compute the best-fit model and set it
+        if set_bestfit:
+            log_prob = posterior.log_prob(samples, observable)
+            best_par = (samples[log_prob == log_prob.max()])[0]            
+            self.setpar_fluctuation(best_par, parinfo)
+        else:
+            self.model = input_model
 
         return par_list, inference, posterior, samples
