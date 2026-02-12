@@ -828,7 +828,7 @@ class InferenceFluctuationFitting(object):
         #========== Get noise MC 
         noise_mc1 = self.data1.noise_mc
         noise_mc2 = self.data2.noise_mc
-        if noise_mc1.shape[0] > self.mcmc_Nresamp or noise_mc2.shape[0] > self.mcmc_Nresamp:
+        if noise_mc1.shape[0] >= self.mcmc_Nresamp or noise_mc2.shape[0] >= self.mcmc_Nresamp:
             Nmc = self.mcmc_Nresamp
             noise_mc1 = noise_mc1[0:Nmc]
             noise_mc2 = noise_mc2[0:Nmc]
@@ -1075,7 +1075,7 @@ class InferenceFluctuationFitting(object):
         #========== Get noise MC 
         noise_mc1 = self.data1.noise_mc
         noise_mc2 = self.data2.noise_mc
-        if noise_mc1.shape[0] > self.mcmc_Nresamp or noise_mc2.shape[0] > self.mcmc_Nresamp:
+        if noise_mc1.shape[0] >= self.mcmc_Nresamp or noise_mc2.shape[0] >= self.mcmc_Nresamp:
             Nmc = self.mcmc_Nresamp
             noise_mc1 = noise_mc1[0:Nmc]
             noise_mc2 = noise_mc2[0:Nmc]

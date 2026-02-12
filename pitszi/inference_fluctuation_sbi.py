@@ -37,6 +37,73 @@ class InferenceFluctuationSBI(object):
     
     """
 
+    #==================================================
+    # Compute results for a given SBI sampling
+    #==================================================
+    
+    def get_sbi_chains_outputs_results(self,
+                                        parlist,
+                                        parinfo,
+                                        posterior,
+                                        conf=68.0,
+                                        truth=None,
+                                        extname=''):
+        """
+        This function can be used to produce automated plots/files
+        that give the results of the SBI samping
+        
+        Parameters
+        ----------
+        - parlist (list): the list of parameter names
+        - posterior (sbi posterior): the posterior
+        - conf (float): confidence limit in % used in results
+        - truth (list): the list of expected parameter value for the fit
+        - extname (string): extra name to add after MCMC in file name
+
+        Outputs
+        ----------
+        Plots are produced
+
+        """
+
+        #---------- Get the chains and lnL
+        observable = self.get_pk2d_data(physical=True)[1]
+        samp = posterior.sample((100000,), x=observable).numpy()
+        log_prob = posterior.log_prob(samp, observable).numpy()
+        Nsample, Nparam = samp.shape
+        
+        #---------- Check the truth
+        if truth is not None:
+            if len(truth) != Nparam:
+                raise ValueError("The 'truth' keyword should match the number of parameters")
+
+        #---------- Add log if needed
+        parlist_stat = []
+        for ipar in range(Nparam):
+            parlist_stat.append(parlist[ipar])
+            if 'sampling' in parinfo[parlist[ipar]]:
+                if parinfo[parlist[ipar]]['sampling']: parlist_stat[ipar]= 'log '+parlist_stat[ipar]
+        
+        #---------- Compute statistics for the chains
+        utils_fitting.chains_statistics(samp[np.newaxis,:], log_prob[np.newaxis,:],
+                                        parname=parlist_stat,
+                                        conf=conf,
+                                        outfile=self.output_dir+'/SBI'+extname+'_chain_statistics.txt')
+
+        #---------- Produce 1D plots of the chains
+        utils_plot.chains_1Dplots(samp[np.newaxis,:], parlist_stat, self.output_dir+'/SBI'+extname+'_chain_1d_plot.pdf')
+        
+        #---------- Produce 1D histogram of the chains
+        namefiles = [self.output_dir+'/SBI'+extname+'_chain_hist_'+i+'.pdf' for i in parlist]
+        utils_plot.chains_1Dhist(samp[np.newaxis,:], parlist_stat, namefiles,
+                                 conf=conf, truth=truth)
+
+        #---------- Produce 2D (corner) plots of the chains
+        utils_plot.chains_2Dplots_corner(samp[np.newaxis,:],
+                                         parlist_stat,
+                                         self.output_dir+'/SBI'+extname+'_chain_2d_plot_corner.pdf',
+                                         truth=truth)
+
 
     #==================================================
     # SBI simulator
@@ -216,19 +283,149 @@ class InferenceFluctuationSBI(object):
 
         #========== Show results
         if show_fit_result:
-            self.get_sbi_chains_outputs_results(par_list, parinfo, sampler,
+            self.get_sbi_chains_outputs_results(par_list, parinfo, posterior,
                                                 truth=true_param,
                                                 extname=extname)
-            self.run_sbi_fluctuation_results(sampler, parinfo,
+            self.run_sbi_fluctuation_results(posterior, parinfo,
                                              true_pk3d=true_pk3d,
                                              extname=extname)
         
         #========== Compute the best-fit model and set it
         if set_bestfit:
-            log_prob = posterior.log_prob(samples, observable)
-            best_par = (samples[log_prob == log_prob.max()])[0]            
+            samp = posterior.sample((100000,), x=observable).numpy()
+            log_prob = posterior.log_prob(samp, observable)
+            best_par = (samp[log_prob == log_prob.max()])[0]            
             self.setpar_fluctuation(best_par, parinfo)
         else:
             self.model = input_model
 
         return par_list, inference, posterior, samples
+
+
+
+
+
+
+
+
+
+    
+    #==================================================
+    # Show the SBI fit results related to fluctuation
+    #==================================================
+    
+    def run_sbi_fluctuation_results(self, posterior, parinfo,
+                                    true_pk3d=None, extname='_Fluctuation'):
+        """
+        This function is used to show the results of the SBI fit
+        regarding the fluctuation
+            
+        Parameters
+        ----------
+        - posterior (sbi object): the posterior object obtained within SBI
+        - parinfo (dict): same as mcmc_fluctuation
+        - true_pk3d (dict): pass a dictionary containing the spectrum to compare with
+        in the form {'k':array in kpc-1, 'pk':array in kpc3}
+        - extname (string): extra name to add after MCMC results file names
+        
+        Outputs
+        ----------
+        plots are produced
+
+        """
+
+        #========== Get noise MC 
+        noise_mc1 = self.data1.noise_mc
+        noise_mc2 = self.data2.noise_mc
+        if noise_mc1.shape[0] >= self.sbi_Nresamp or noise_mc2.shape[0] >= self.sbi_Nresamp:
+            Nmc = self.sbi_Nresamp
+            noise_mc1 = noise_mc1[0:Nmc]
+            noise_mc2 = noise_mc2[0:Nmc]
+        else:
+            Nmc = np.amin(np.array([noise_mc1.shape[0], noise_mc2.shape[0]]))
+            if self.silent == False: print('WARNING: the number of noise MC is lower than requested')
+            
+        #========== Get the best-fit
+        observable = self.get_pk2d_data(physical=True)[1]
+        samp = posterior.sample((100000,), x=observable).numpy()
+        log_prob = posterior.log_prob(samp, observable)
+        best_par = (samp[log_prob == log_prob.max()])[0]            
+        self.setpar_fluctuation(best_par, parinfo)        
+        k3d, best_pk3d = self.model.get_pressure_fluctuation_spectrum(np.logspace(-4,-1,100)*u.kpc**-1)
+        k2d, model_pk2d_ref, model_pk2d_covmat, _ = self.get_pk2d_model_statistics(physical=True,
+                                                                                   Nmc=self.sbi_Nresamp)
+        best_pk2d_noise = self.nuisance_Anoise * self._pk2d_noise
+        best_pk2d_bkg   = self.nuisance_Abkg   * self._pk2d_bkg
+
+        #========== Get the MC
+        MC_pk3d = np.zeros((self.sbi_Nresamp, len(k3d)))
+        MC_pk2d = np.zeros((self.sbi_Nresamp, len(k2d)))
+        MC_pk2d_noise = np.zeros((self.sbi_Nresamp, len(k2d)))
+        MC_pk2d_bkg = np.zeros((self.sbi_Nresamp, len(k2d)))
+        
+        MC_pars = posterior.sample((self.sbi_Nresamp,), x=observable).numpy()
+        for imc in range(self.sbi_Nresamp):
+            # Get MC model
+            self.setpar_fluctuation(MC_pars[imc,:], parinfo)
+
+            # Get MC noise
+            MC_pk2d_noise[imc,:] = self.nuisance_Anoise*utils_pk.pk_data_augmentation(k2d,self._pk2d_noise_mc,Nsim=1,method='LogNormCov')[0]
+
+            # Get MC bkg
+            if self.nuisance_bkg_mc1 is not None and np.std(self._pk2d_bkg_mc) != 0:
+                MC_pk2d_bkg[imc,:] = self.nuisance_Abkg*utils_pk.pk_data_augmentation(k2d,self._pk2d_bkg_mc,Nsim=1,method='LogNormCov')[0]
+            
+            # Get MC Pk2d
+            MC_pk2d[imc,:] = self.get_pk2d_model_brute(physical=True, include_noise=False, include_bkg=False)[1].to_value('kpc2')
+
+            # Get MC Pk3d
+            MC_pk3d[imc,:] = self.model.get_pressure_fluctuation_spectrum(k3d)[1].to_value('kpc3')
+
+        #========== Plot the fitted image data
+        utils_plot.show_input_delta_ymap(self.output_dir+'/SBI'+extname+'_results_input_image1.pdf',
+                                         self.data1.image,
+                                         self._dy_image1,
+                                         self._ymap_sphA1,
+                                         self._ymap_sphB1,
+                                         self.method_w8,
+                                         self.data1.header,
+                                         noise_mc1,
+                                         mask=self.data1.mask,
+                                         visu_smooth=10)
+        utils_plot.show_input_delta_ymap(self.output_dir+'/SBI'+extname+'_results_input_image2.pdf',
+                                         self.data2.image,
+                                         self._dy_image2,
+                                         self._ymap_sphA2,
+                                         self._ymap_sphB2,
+                                         self.method_w8,
+                                         self.data2.header,
+                                         noise_mc2,
+                                         mask=self.data2.mask,
+                                         visu_smooth=10)
+        
+        #========== Plot the covariance matrix
+        if self.nuisance_bkg_mc1 is not None:
+            covmat_bkg = self._pk2d_bkg_cov
+        else:
+            covmat_bkg = None
+        utils_plot.show_fit_result_covariance(self.output_dir+'/SBI'+extname+'_results_covariance.pdf',
+                                              self._pk2d_noise_cov,
+                                              model_pk2d_covmat.to_value('kpc4'),
+                                              covmat_model=self._pk2d_modref_cov,
+                                              covmat_bkg=covmat_bkg)
+        
+        #========== Plot the Pk2d constraint
+        utils_plot.show_fit_result_pk2d(self.output_dir+'/SBI'+extname+'_results_pk2d.pdf',
+                                        self._kctr_kpc, self._pk2d_data,
+                                        model_pk2d_ref.to_value('kpc2'),
+                                        np.diag(model_pk2d_covmat.to_value('kpc4'))**0.5,
+                                        self._pk2d_noise_rms, self._pk2d_bkg_rms,
+                                        MC_pk2d,
+                                        best_pk2d_noise, MC_pk2d_noise,
+                                        best_pk2d_bkg, MC_pk2d_bkg)
+
+        #========== Plot the Pk3d constraint
+        utils_plot.show_fit_result_pk3d(self.output_dir+'/SBI'+extname+'_results_pk3d.pdf',
+                                        k3d.to_value('kpc-1'), best_pk3d.to_value('kpc3'),
+                                        MC_pk3d,
+                                        true_pk3d=true_pk3d)
