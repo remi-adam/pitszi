@@ -82,9 +82,12 @@ class InferenceFluctuationFitting(object):
         parlist_stat = []
         for ipar in range(Nparam):
             parlist_stat.append(parlist[ipar])
-            if 'sampling' in parinfo[parlist[ipar]]:
-                if parinfo[parlist[ipar]]['sampling']: parlist_stat[ipar]= 'log '+parlist_stat[ipar]
-                    
+            if 'User' in parinfo.keys():
+                print('log sampling prints to be implemented for User special case')
+            else:
+                if 'sampling' in parinfo[parlist[ipar]]:
+                    if parinfo[parlist[ipar]]['sampling'] == 'log': parlist_stat[ipar]= 'log '+parlist_stat[ipar]
+                
         #---------- Remove the burnin
         if self.mcmc_burnin <= Nsample:
             par_chains = sampler.chain[:,self.mcmc_burnin:,:]
@@ -159,9 +162,13 @@ class InferenceFluctuationFitting(object):
         parlist_stat = []
         for ipar in range(Nparam):
             parlist_stat.append(parlist[ipar])
-            if 'sampling' in parinfo[parlist[ipar]]:
-                if parinfo[parlist[ipar]]['sampling']: parlist_stat[ipar]= 'log '+parlist_stat[ipar]
-                    
+            if 'User' in parinfo.keys():
+                print('log sampling prints to be implemented for User special case')
+            else:
+                if 'sampling' in parinfo[parlist[ipar]]:
+                    if parinfo[parlist[ipar]]['sampling'] == 'log': parlist_stat[ipar]= 'log '+parlist_stat[ipar]
+
+                
         #---------- Output best fit and errors
         print('----- Parameter best-fit: -----')
         file = open(self.output_dir+'/CurveFit'+extname+'_statistics_main.txt','w')
